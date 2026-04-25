@@ -1,0 +1,57 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.Python
+
+# Patient data — never commit
+speakflow.db
+
+# Clinician reference recordings — private audio files
+references/
+
+# Temporary audio files
+*.wav
+*.webm
+*.ogg
+*.mp3
+*.mp4
+*.flac
+
+# Training data (too large for git)
+s1/
+s2/
+s3/
+s4/
+s1.zip
+s2.zip
+s3.zip
+s4.zip
+alignments/
+alignments.zip
+
+# Trained model weights
+*.pkl
+*.keras
+*.pt
+*.pth
+lip_sequences.pkl
+lip_ipa_dataset.csv
+
+# LipCoordNet pretrained weights
+LipCoordNet/pretrain/
+LipCoordNet/samples/
+LipCoordNet/output_videos/
+
+# macOS
+.DS_Store
+__MACOSX/
+*.sb-*
+
+# Server logs
+*.log
+/tmp/
+
+# Environment
+.env
+*.env

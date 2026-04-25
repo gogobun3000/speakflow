@@ -1,0 +1,2571 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Speech Therapy</title>
+<!-- MediaPipe Face Mesh for lip tracking -->
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+<style>
+:root {
+  --bg:     #0d0d1a; --card:  #161628; --border:#2a2a4a;
+  --purple: #7c3aed; --cyan:  #06b6d4; --amber: #f59e0b;
+  --green:  #10b981; --red:   #ef4444; --muted: #64748b;
+  --text:   #e2e8f0; --r:     14px;
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{background:var(--bg);color:var(--text);font-family:'Segoe UI',system-ui,sans-serif;min-height:100vh;padding:20px;}
+.app{max-width:960px;margin:0 auto;display:flex;flex-direction:column;gap:16px;}
+
+/* ── header ── */
+header{display:flex;align-items:center;justify-content:space-between;background:var(--card);border:1px solid var(--border);border-radius:var(--r);padding:14px 22px;}
+header h1{font-size:1.3rem;font-weight:700;}
+header h1 span{color:var(--purple);}
+.pills{display:flex;gap:8px;flex-wrap:wrap;}
+.pill{padding:3px 11px;border-radius:99px;font-size:.72rem;font-weight:600;background:#1a1a3a;color:var(--muted);border:1px solid var(--border);transition:.3s;}
+.pill.ok{color:var(--green);border-color:var(--green);background:#0d2a1e;}
+.pill.bad{color:var(--red);border-color:var(--red);background:#2a0d0d;}
+.pill.busy{color:var(--amber);border-color:var(--amber);background:#2a1e0d;}
+
+/* ── tabs ── */
+.tabs{display:flex;gap:4px;background:var(--card);border:1px solid var(--border);border-radius:var(--r);padding:6px;}
+.tab-btn{flex:1;padding:10px;border-radius:10px;border:none;background:transparent;color:var(--muted);font-size:.9rem;font-weight:700;cursor:pointer;transition:.2s;}
+.tab-btn.active{background:var(--purple);color:#fff;}
+.tab-btn:hover:not(.active){background:#1a0d3a;color:var(--text);}
+
+/* ── error bar ── */
+#errBar{display:none;background:#2a0d0d;border:1px solid var(--red);border-radius:8px;padding:10px 16px;color:var(--red);font-size:.85rem;}
+
+/* ── panels ── */
+.panel{background:var(--card);border:1px solid var(--border);border-radius:var(--r);padding:18px;}
+.panel h2{font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--muted);margin-bottom:10px;}
+.row{display:grid;grid-template-columns:1fr 1fr;gap:16px;}
+@media(max-width:600px){.row{grid-template-columns:1fr;}}
+.sec-lbl{font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--muted);}
+.empty{color:var(--muted);font-style:italic;font-size:.88rem;}
+
+/* ── TRANSCRIBE TAB ── */
+.rec-card{background:var(--card);border:1px solid var(--border);border-radius:var(--r);padding:20px;display:flex;flex-direction:row;align-items:center;gap:20px;}
+@media(max-width:640px){.rec-card{flex-direction:column;}}
+/* camera */
+.cam-wrap{width:200px;min-width:160px;height:150px;flex-shrink:0;position:relative;background:#080814;border-radius:10px;overflow:hidden;border:1px solid var(--border);}
+@media(max-width:640px){.cam-wrap{width:100%;height:160px;}}
+.cam-wrap video{width:100%;height:100%;object-fit:cover;transform:scaleX(-1);display:block;}
+.cam-wrap canvas{position:absolute;top:0;left:0;width:100%;height:100%;transform:scaleX(-1);}
+.cam-status{position:absolute;bottom:5px;left:6px;font-size:.62rem;color:#fff;background:rgba(0,0,0,.65);padding:2px 8px;border-radius:99px;pointer-events:none;}
+.cam-pulse{width:7px;height:7px;border-radius:50%;background:var(--red);display:inline-block;margin-right:4px;animation:pulse-dot 1s ease-in-out infinite;}
+@keyframes pulse-dot{0%,100%{opacity:1}50%{opacity:.3}}
+/* audio controls column */
+.rec-controls{flex:1;display:flex;flex-direction:column;align-items:center;gap:14px;min-width:0;}
+.wave-wrap{width:100%;height:56px;background:#080814;border-radius:8px;overflow:hidden;}
+#wave{width:100%;height:100%;display:block;}
+.mic-btn{width:110px;height:110px;border-radius:50%;border:3px solid var(--purple);background:#1a0d3a;color:var(--text);font-size:.85rem;font-weight:700;cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;transition:.2s;}
+.mic-btn .ico{font-size:1.9rem;line-height:1;}
+.mic-btn:hover{background:#250f52;transform:scale(1.04);}
+.mic-btn.on{border-color:var(--red);background:#2a0d0d;animation:pulse 1.4s ease-out infinite;}
+@keyframes pulse{0%{box-shadow:0 0 0 0 rgba(239,68,68,.5)}70%{box-shadow:0 0 0 22px rgba(239,68,68,0)}100%{box-shadow:0 0 0 0 rgba(239,68,68,0)}}
+.hint{font-size:.78rem;color:var(--muted);text-align:center;}
+.txt-out{min-height:54px;font-size:1.05rem;line-height:1.6;}
+.ipa-out{min-height:54px;font-size:1.25rem;line-height:1.6;font-family:monospace;color:var(--cyan);letter-spacing:1px;}
+#wCards{display:flex;flex-wrap:wrap;gap:10px;}
+.wc{background:var(--card);border:1px solid var(--border);border-radius:9px;padding:12px 16px;cursor:pointer;transition:.15s;min-width:100px;}
+.wc:hover,.wc.sel{border-color:var(--purple);background:#1a0d3a;}
+.wc .ww{font-size:.95rem;font-weight:600;}
+.wc .wi{font-size:.82rem;color:var(--cyan);margin-top:3px;font-family:monospace;}
+#phDetail{background:var(--card);border:1px solid var(--border);border-radius:var(--r);padding:18px;display:none;}
+#phDetail h2{font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--muted);margin-bottom:14px;}
+.ph-scroll{display:flex;gap:9px;overflow-x:auto;padding-bottom:4px;}
+.ph-scroll::-webkit-scrollbar{height:4px;}
+.ph-scroll::-webkit-scrollbar-track{background:#0a0a18;}
+.ph-scroll::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px;}
+.phc{flex-shrink:0;display:flex;flex-direction:column;align-items:center;gap:7px;background:#0f0f22;border:1px solid var(--border);border-radius:9px;padding:11px 13px;min-width:118px;cursor:pointer;transition:.15s;}
+.phc:hover,.phc.on{border-color:var(--purple);background:#1a0d3a;}
+.phc .sym{font-size:1.7rem;font-family:monospace;}
+.phc .nm{font-size:.68rem;color:var(--muted);text-align:center;}
+.phc svg{width:78px;height:52px;}
+#phBox{background:#0f0f22;border:1px solid var(--border);border-radius:9px;padding:15px 18px;margin-top:14px;display:none;}
+#phBox .ps{font-size:2.2rem;font-family:monospace;}
+#phBox .pn{font-size:.95rem;font-weight:700;margin-top:3px;}
+#phBox .pd{font-size:.82rem;color:var(--muted);margin-top:3px;}
+#phBox .pe{font-size:.82rem;margin-top:7px;}
+#phBox .pe em{font-style:normal;color:var(--amber);font-weight:700;}
+#phBox .pt{font-size:.78rem;color:var(--green);margin-top:7px;background:#0d2a1e;padding:7px 11px;border-radius:6px;}
+
+/* ── EXERCISE TAB ── */
+.ex-layout{display:grid;grid-template-columns:220px 1fr;gap:16px;}
+@media(max-width:680px){.ex-layout{grid-template-columns:1fr;}}
+
+/* category list */
+.cat-list{display:flex;flex-direction:column;gap:6px;}
+.cat-btn{padding:9px 13px;border-radius:9px;border:1px solid var(--border);background:transparent;color:var(--muted);font-size:.83rem;font-weight:600;cursor:pointer;text-align:left;transition:.15s;}
+.cat-btn:hover{background:#1a0d3a;color:var(--text);}
+.cat-btn.sel{background:var(--purple);color:#fff;border-color:var(--purple);}
+
+/* word chips */
+.word-chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px;}
+.ex-wc{padding:8px 14px;border-radius:8px;border:1px solid var(--border);background:#0f0f22;color:var(--text);font-size:.9rem;font-weight:600;cursor:pointer;transition:.15s;}
+.ex-wc:hover{border-color:var(--purple);}
+.ex-wc.sel{border-color:var(--cyan);background:#0a1f28;color:var(--cyan);}
+.ex-wc.done-ok{border-color:var(--green);background:#0d2a1e;}
+.ex-wc.done-err{border-color:var(--red);background:#2a0d0d;}
+
+/* practice area */
+.target-big{font-size:3.2rem;font-weight:800;letter-spacing:-1px;line-height:1.1;}
+.target-ipa{font-size:1.4rem;font-family:monospace;color:var(--cyan);letter-spacing:2px;margin-top:6px;}
+.ph-target-row{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;}
+
+/* phoneme result chips */
+.phx{display:inline-flex;flex-direction:column;align-items:center;gap:3px;padding:8px 13px;border-radius:9px;border:2px solid var(--border);font-size:1.1rem;font-family:monospace;background:#0f0f22;min-width:46px;text-align:center;}
+.phx.neutral{border-color:var(--border);color:var(--muted);}
+.phx.correct{border-color:var(--green);background:#0d2a1e;color:var(--green);}
+.phx.wrong{border-color:var(--red);background:#2a0d0d;color:var(--red);cursor:pointer;}
+.phx.missing{border-color:var(--amber);background:#2a1e0d;color:var(--amber);}
+.phx .ph-badge{font-size:.6rem;font-weight:700;}
+
+/* exercise record btn */
+.ex-rec-btn{margin-top:18px;padding:14px 32px;border-radius:12px;border:2px solid var(--purple);background:#1a0d3a;color:var(--text);font-size:1rem;font-weight:700;cursor:pointer;transition:.2s;display:flex;align-items:center;gap:10px;}
+.ex-rec-btn:hover{background:#250f52;transform:scale(1.02);}
+.ex-rec-btn.recording{border-color:var(--red);background:#2a0d0d;animation:pulse 1.4s ease-out infinite;}
+.ex-rec-btn:disabled{opacity:.4;cursor:not-allowed;transform:none;}
+
+/* countdown ring */
+.ex-timer{font-size:.78rem;color:var(--muted);margin-top:8px;min-height:1.2em;}
+
+/* result panel */
+.result-panel{background:#0a0a18;border:1px solid var(--border);border-radius:12px;padding:18px;margin-top:16px;}
+.result-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;}
+.result-label{font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--muted);}
+.score-badge{padding:4px 14px;border-radius:99px;font-size:.85rem;font-weight:700;}
+.score-badge.perfect{background:#0d2a1e;color:var(--green);border:1px solid var(--green);}
+.score-badge.good{background:#1e2a0d;color:#86efac;border:1px solid #86efac;}
+.score-badge.ok{background:#2a1e0d;color:var(--amber);border:1px solid var(--amber);}
+.score-badge.retry{background:#2a0d0d;color:var(--red);border:1px solid var(--red);}
+.heard-line{font-size:.88rem;color:var(--muted);margin-bottom:12px;}
+.heard-line strong{color:var(--text);}
+.ph-result-row{display:flex;gap:8px;flex-wrap:wrap;}
+
+/* intervention box */
+.intervention{margin-top:16px;border-top:1px solid var(--border);padding-top:16px;}
+.intv-item{background:#0f0f22;border:1px solid var(--border);border-radius:10px;padding:14px 16px;margin-top:10px;}
+.intv-item .intv-head{display:flex;align-items:center;gap:12px;margin-bottom:10px;}
+.intv-item .intv-phonemes{display:flex;align-items:center;gap:8px;font-family:monospace;font-size:1.3rem;}
+.intv-item .arrow{color:var(--muted);}
+.intv-item .ph-wrong{color:var(--red);}
+.intv-item .ph-right{color:var(--green);}
+.intv-item .intv-name{font-size:.85rem;font-weight:700;}
+.intv-item .intv-desc{font-size:.82rem;color:var(--muted);margin-top:3px;}
+.intv-svgs{display:flex;gap:16px;align-items:flex-start;margin-top:10px;flex-wrap:wrap;}
+.intv-svg-block{display:flex;flex-direction:column;align-items:center;gap:4px;}
+.intv-svg-block span{font-size:.7rem;color:var(--muted);}
+.intv-svg-block svg{width:90px;height:62px;}
+.intv-tip{font-size:.8rem;color:var(--green);background:#0d2a1e;padding:8px 12px;border-radius:6px;margin-top:10px;}
+
+/* progress bar */
+.progress-bar-wrap{margin-top:16px;}
+.progress-bar-bg{height:8px;background:#1a1a3a;border-radius:4px;overflow:hidden;}
+.progress-bar-fill{height:100%;border-radius:4px;background:linear-gradient(90deg,var(--purple),var(--cyan));transition:width .4s;}
+.progress-text{font-size:.75rem;color:var(--muted);margin-top:5px;}
+
+/* ── HEAR IT BUTTON ── */
+.hear-btn{padding:9px 18px;border-radius:9px;border:1px solid var(--cyan);background:#0a1f28;color:var(--cyan);font-size:.85rem;font-weight:700;cursor:pointer;transition:.15s;display:inline-flex;align-items:center;gap:7px;}
+.hear-btn:hover{background:#0d2a3a;}
+.hear-btn.playing{border-color:var(--amber);color:var(--amber);background:#1e180a;}
+.hear-btn:disabled{opacity:.45;cursor:not-allowed;}
+.hear-source{font-size:.65rem;color:var(--muted);margin-top:4px;}
+
+/* ── SENTENCE EXERCISES ── */
+.ex-wc.sentence-card{min-width:200px;max-width:100%;}
+.sent-target{font-size:1.3rem;font-weight:700;line-height:1.4;letter-spacing:-.2px;}
+.sent-focus{font-size:.75rem;color:var(--purple);margin-top:4px;}
+.word-chips-row{display:flex;flex-wrap:wrap;gap:7px;margin-top:10px;}
+.wchip{padding:6px 12px;border-radius:7px;font-size:.9rem;font-weight:600;border:2px solid var(--border);}
+.wchip.correct{border-color:var(--green);background:#0d2a1e;color:var(--green);}
+.wchip.wrong{border-color:var(--red);background:#2a0d0d;color:var(--red);}
+.wchip.missing{border-color:var(--amber);background:#2a1e0d;color:var(--amber);text-decoration:line-through;}
+.wchip.extra{border-color:var(--muted);background:transparent;color:var(--muted);font-style:italic;}
+
+/* score tracker */
+.score-tracker{display:flex;gap:16px;align-items:center;padding:12px 16px;background:var(--card);border:1px solid var(--border);border-radius:10px;}
+.score-tracker .sc-num{font-size:1.5rem;font-weight:800;}
+.score-tracker .sc-lbl{font-size:.72rem;color:var(--muted);}
+.sc-correct{color:var(--green);}
+.sc-attempts{color:var(--cyan);}
+
+/* ── CALIBRATION MODAL ── */
+.cal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:1000;display:flex;align-items:center;justify-content:center;padding:20px;}
+.cal-modal{background:var(--card);border:1px solid var(--border);border-radius:var(--r);padding:32px 28px;max-width:420px;width:100%;display:flex;flex-direction:column;align-items:center;gap:18px;text-align:center;}
+.cal-step-lbl{font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--muted);}
+.cal-word{font-size:4rem;font-weight:800;color:var(--text);line-height:1;}
+.cal-ipa{font-size:1.4rem;font-family:monospace;color:var(--cyan);}
+.cal-hint{font-size:.82rem;color:var(--muted);max-width:280px;}
+.cal-progress{width:100%;height:6px;background:#1a1a3a;border-radius:3px;overflow:hidden;}
+.cal-bar{height:100%;border-radius:3px;background:linear-gradient(90deg,var(--purple),var(--cyan));transition:width .4s;}
+.cal-rec-btn{padding:14px 32px;border-radius:12px;border:2px solid var(--purple);background:#1a0d3a;color:var(--text);font-size:1rem;font-weight:700;cursor:pointer;transition:.2s;display:flex;align-items:center;gap:10px;}
+.cal-rec-btn:hover{background:#250f52;}
+.cal-rec-btn.recording{border-color:var(--red);background:#2a0d0d;animation:pulse 1.4s ease-out infinite;}
+.cal-rec-btn:disabled{opacity:.4;cursor:not-allowed;}
+.cal-result{font-size:.82rem;padding:10px 14px;border-radius:8px;width:100%;}
+.cal-result.ok{background:#0d2a1e;color:var(--green);border:1px solid var(--green);}
+.cal-result.err{background:#2a0d0d;color:var(--red);border:1px solid var(--red);}
+.cal-profile{background:#0f0f22;border:1px solid var(--border);border-radius:10px;padding:14px 18px;width:100%;text-align:left;}
+.cal-profile-title{font-size:.72rem;text-transform:uppercase;letter-spacing:1px;color:var(--muted);margin-bottom:8px;}
+.cal-badge{display:inline-flex;align-items:center;gap:5px;padding:3px 10px;border-radius:99px;font-size:.72rem;font-weight:700;background:#0d2a1e;color:var(--green);border:1px solid var(--green);}
+
+/* ── HISTORY TAB ── */
+.hist-stats{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:12px;}
+.hist-stat{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;}
+.hist-stat .hs-num{font-size:2rem;font-weight:800;line-height:1;}
+.hist-stat .hs-lbl{font-size:.7rem;color:var(--muted);margin-top:4px;}
+.hist-table{width:100%;border-collapse:collapse;font-size:.82rem;}
+.hist-table th{font-size:.68rem;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);padding:8px 10px;text-align:left;border-bottom:1px solid var(--border);}
+.hist-table td{padding:8px 10px;border-bottom:1px solid #1a1a2e;}
+.hist-table tr:hover td{background:#0f0f22;}
+.score-dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:4px;}
+.trend-up{color:var(--green);}
+.trend-dn{color:var(--red);}
+.trend-st{color:var(--muted);}
+.recent-list{display:flex;flex-direction:column;gap:6px;}
+.recent-item{display:flex;align-items:center;gap:10px;background:var(--card);border:1px solid var(--border);border-radius:8px;padding:9px 13px;font-size:.82rem;}
+.recent-word{font-weight:700;min-width:80px;}
+.recent-ipa{font-family:monospace;color:var(--cyan);font-size:.78rem;flex:1;}
+.recent-score{font-size:.75rem;font-weight:700;min-width:36px;text-align:right;}
+.recent-time{font-size:.68rem;color:var(--muted);min-width:90px;text-align:right;}
+
+/* ── CLINICIAN TAB ── */
+.clin-gate{display:flex;flex-direction:column;align-items:center;gap:14px;padding:40px 20px;}
+.clin-gate h2{font-size:1.2rem;font-weight:700;}
+.clin-gate p{font-size:.85rem;color:var(--muted);text-align:center;max-width:340px;}
+.clin-pw{display:flex;gap:8px;}
+.clin-pw input{padding:10px 14px;border-radius:9px;border:1px solid var(--border);background:#0f0f22;color:var(--text);font-size:.95rem;flex:1;}
+.clin-pw button{padding:10px 18px;border-radius:9px;border:none;background:var(--purple);color:#fff;font-weight:700;cursor:pointer;}
+.ref-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px;}
+.ref-card{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:12px 14px;cursor:pointer;transition:.15s;}
+.ref-card:hover{border-color:var(--purple);}
+.ref-card.has-ref{border-color:var(--green);}
+.ref-card.sel{border-color:var(--cyan);background:#0a1f28;}
+.ref-word{font-size:1rem;font-weight:700;}
+.ref-ipa{font-size:.75rem;font-family:monospace;color:var(--cyan);margin-top:2px;}
+.ref-status{font-size:.65rem;margin-top:4px;}
+.ref-status.ok{color:var(--green);}
+.ref-status.none{color:var(--muted);}
+.clin-rec-area{background:var(--card);border:1px solid var(--border);border-radius:var(--r);padding:20px;display:flex;flex-direction:column;gap:14px;}
+.clin-word-big{font-size:2.5rem;font-weight:800;}
+.clin-word-ipa{font-size:1.1rem;font-family:monospace;color:var(--cyan);}
+.clin-rec-btn{padding:12px 28px;border-radius:10px;border:2px solid var(--purple);background:#1a0d3a;color:var(--text);font-size:.95rem;font-weight:700;cursor:pointer;transition:.2s;display:inline-flex;align-items:center;gap:8px;}
+.clin-rec-btn:hover{background:#250f52;}
+.clin-rec-btn.recording{border-color:var(--red);background:#2a0d0d;animation:pulse 1.4s ease-out infinite;}
+.clin-rec-btn:disabled{opacity:.4;cursor:not-allowed;}
+.ref-acoustic{background:#0f0f22;border:1px solid var(--border);border-radius:8px;padding:12px 14px;font-size:.78rem;font-family:monospace;color:var(--cyan);}
+.ref-badge{display:inline-flex;align-items:center;gap:4px;padding:3px 10px;border-radius:99px;font-size:.68rem;font-weight:700;background:#0d2a1e;color:var(--green);border:1px solid var(--green);}
+
+/* ── PATIENT FEEDBACK CARD ── */
+.feedback-card{background:linear-gradient(135deg,#1a0d3a,#0a1f28);border:1px solid var(--purple);border-radius:12px;padding:18px 20px;margin-bottom:14px;}
+.feedback-headline{font-size:1.1rem;font-weight:700;color:var(--text);margin-bottom:10px;line-height:1.4;}
+.feedback-praise{font-size:.85rem;color:var(--green);margin-bottom:10px;}
+.feedback-tips{display:flex;flex-direction:column;gap:7px;}
+.feedback-tip{font-size:.88rem;color:var(--text);background:rgba(0,0,0,.25);border-left:3px solid var(--purple);padding:7px 12px;border-radius:0 6px 6px 0;line-height:1.5;}
+/* ── EXERCISE LIP CAMERA ── */
+.ex-cam-wrap{width:160px;height:120px;position:relative;background:#080814;border-radius:8px;overflow:hidden;border:1px solid var(--border);flex-shrink:0;margin-top:14px;}
+.ex-cam-wrap video{width:100%;height:100%;object-fit:cover;transform:scaleX(-1);display:block;}
+.ex-cam-wrap canvas{position:absolute;top:0;left:0;width:100%;height:100%;transform:scaleX(-1);}
+/* lip confirmation panel */
+.lip-panel{border-top:1px solid var(--border);padding-top:14px;margin-top:14px;}
+.lip-title{font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--muted);margin-bottom:12px;}
+.lip-meters{display:flex;gap:16px;flex-wrap:wrap;margin-bottom:10px;}
+.lip-meter{flex:1;min-width:120px;}
+.lip-meter-label{font-size:.68rem;color:var(--muted);margin-bottom:4px;}
+.lip-bar-bg{height:8px;background:#1a1a3a;border-radius:4px;overflow:visible;position:relative;}
+.lip-bar-ref{position:absolute;top:-2px;height:12px;width:2px;border-radius:1px;background:rgba(255,255,255,.3);}
+.lip-bar-fill{height:100%;border-radius:4px;transition:width .4s;}
+.lip-bar-val{font-size:.68rem;font-family:monospace;color:var(--cyan);margin-top:3px;}
+.lip-signal{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px;}
+.lip-confirm{font-size:.75rem;color:var(--green);background:#0d2a1e;padding:5px 10px;border-radius:6px;}
+.lip-mismatch{font-size:.75rem;color:var(--red);background:#2a0d0d;padding:5px 10px;border-radius:6px;}
+.xref-note{font-size:.78rem;padding:8px 11px;border-radius:7px;margin-top:6px;}
+.xref-high    {background:#0d2a1e;color:var(--green);border:1px solid var(--green);}
+.xref-mismatch{background:#2a1a0d;color:var(--amber);border:1px solid var(--amber);}
+.xref-low     {background:#2a0d0d;color:var(--red);border:1px solid var(--red);}
+/* ── ACOUSTIC PANEL ── */
+.acoustic-panel{border-top:1px solid var(--border);padding-top:14px;margin-top:14px;}
+.acoustic-title{font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--muted);margin-bottom:12px;}
+.acou-seg{background:#07070f;border:1px solid var(--border);border-radius:10px;padding:12px 14px;margin-bottom:8px;}
+.acou-seg-head{display:flex;align-items:center;gap:8px;margin-bottom:10px;}
+.acou-ph{font-family:monospace;font-size:1.2rem;}
+.acou-label{font-size:.75rem;font-weight:600;}
+.acou-dur{font-size:.7rem;color:var(--muted);margin-left:auto;}
+.fmnt-row{display:flex;align-items:center;gap:8px;margin-bottom:6px;}
+.fmnt-name{font-size:.7rem;color:var(--muted);width:24px;flex-shrink:0;}
+.fmnt-bg{flex:1;height:8px;background:#1a1a3a;border-radius:4px;overflow:visible;position:relative;}
+.fmnt-ref{position:absolute;top:-2px;height:12px;width:2px;border-radius:1px;background:rgba(255,255,255,.3);}
+.fmnt-bar{height:100%;border-radius:4px;transition:width .5s;}
+.fmnt-val{font-size:.7rem;font-family:monospace;color:var(--cyan);width:58px;text-align:right;flex-shrink:0;}
+.fmnt-diff{font-size:.68rem;width:44px;flex-shrink:0;}
+.cog-row{display:flex;align-items:center;gap:8px;margin-bottom:6px;}
+.cog-bg{flex:1;height:8px;background:#1a1a3a;border-radius:4px;position:relative;overflow:visible;}
+.cog-bar{height:100%;border-radius:4px;transition:width .5s;}
+.lisp-badge{display:inline-flex;align-items:center;gap:4px;padding:3px 10px;border-radius:99px;font-size:.7rem;font-weight:700;}
+.lisp-ok{background:#0d2a1e;color:var(--green);}
+.lisp-mod{background:#2a1e0d;color:var(--amber);}
+.lisp-bad{background:#2a0d0d;color:var(--red);}
+.acou-note{font-size:.75rem;margin-top:6px;padding:7px 10px;border-radius:6px;}
+.acou-note.warn{background:#2a1e0d;color:var(--amber);}
+.acou-note.alert{background:#2a0d0d;color:var(--red);}
+.acou-note.good{background:#0d2a1e;color:var(--green);}
+.acou-conf{font-size:.68rem;color:var(--muted);margin-bottom:4px;}
+.clinical-box{margin-top:10px;padding:10px 12px;background:#0f0f22;border:1px solid var(--border);border-radius:8px;}
+.clinical-box-title{font-size:.68rem;text-transform:uppercase;letter-spacing:1px;color:var(--muted);margin-bottom:6px;}
+.clinical-line{font-size:.73rem;color:var(--text);font-family:monospace;margin-bottom:2px;line-height:1.4;}
+
+/* ── PHONEME TAB ── */
+.ph-filter-row{display:flex;gap:8px;flex-wrap:wrap;}
+.ph-filter-btn{padding:6px 14px;border-radius:99px;border:1px solid var(--border);background:transparent;color:var(--muted);font-size:.78rem;font-weight:600;cursor:pointer;transition:.15s;}
+.ph-filter-btn:hover{color:var(--text);border-color:var(--purple);}
+.ph-filter-btn.sel{background:var(--purple);color:#fff;border-color:var(--purple);}
+.ph-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:10px;}
+.ph-card{background:var(--card);border:2px solid var(--border);border-radius:12px;padding:14px 10px;display:flex;flex-direction:column;align-items:center;gap:6px;cursor:pointer;transition:.15s;position:relative;}
+.ph-card:hover{border-color:var(--purple);background:#1a0d3a;}
+.ph-card.active-card{border-color:var(--cyan);background:#0a1f28;}
+.ph-card.mastered{border-color:var(--green);background:#0a1e12;}
+.ph-big{font-size:2rem;font-family:monospace;line-height:1;}
+.ph-card-name{font-size:.65rem;color:var(--muted);text-align:center;line-height:1.3;}
+.ph-card-word{font-size:.78rem;font-weight:700;color:var(--text);}
+.ph-card-word em{font-style:normal;text-decoration:underline;text-decoration-color:var(--purple);}
+.ph-dots{display:flex;gap:3px;margin-top:2px;}
+.ph-dot{width:7px;height:7px;border-radius:50%;background:var(--border);}
+.ph-dot.ok{background:var(--green);}
+.ph-dot.err{background:var(--red);}
+/* practice panel */
+.ph-practice-panel{background:var(--card);border:2px solid var(--cyan);border-radius:var(--r);padding:22px;display:flex;flex-direction:column;gap:16px;}
+.ph-practice-panel h3{font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--muted);}
+.ph-practice-top{display:grid;grid-template-columns:auto 1fr;gap:20px;align-items:start;}
+@media(max-width:500px){.ph-practice-top{grid-template-columns:1fr;}}
+.ph-practice-symbol{font-size:5rem;font-family:monospace;line-height:1;}
+.ph-practice-symbol svg{width:110px;height:74px;margin-top:8px;}
+.ph-say-word{font-size:1rem;color:var(--muted);}
+.ph-say-word strong{font-size:2rem;color:var(--text);font-weight:800;display:block;margin-top:4px;font-family:monospace;}
+.ph-say-word .ph-in-word{color:var(--purple);text-decoration:underline;}
+.ph-rec-btn{padding:13px 28px;border-radius:12px;border:2px solid var(--purple);background:#1a0d3a;color:var(--text);font-size:.95rem;font-weight:700;cursor:pointer;transition:.2s;display:inline-flex;align-items:center;gap:10px;}
+.ph-rec-btn:hover{background:#250f52;}
+.ph-rec-btn.recording{border-color:var(--red);background:#2a0d0d;animation:pulse 1.4s ease-out infinite;}
+.ph-rec-btn:disabled{opacity:.4;cursor:not-allowed;}
+.ph-result-box{border-radius:10px;padding:14px 16px;margin-top:4px;}
+.ph-result-box.found{background:#0d2a1e;border:1px solid var(--green);}
+.ph-result-box.notfound{background:#2a0d0d;border:1px solid var(--red);}
+.ph-result-box .ph-res-head{font-size:1rem;font-weight:700;display:flex;align-items:center;gap:8px;}
+.ph-result-box .ph-res-ipa{font-family:monospace;font-size:1.1rem;color:var(--cyan);margin-top:4px;}
+.ph-result-box .ph-res-tip{font-size:.8rem;color:var(--green);margin-top:8px;background:#0a2018;padding:7px 11px;border-radius:6px;}
+.ph-result-box .ph-res-wrong{font-size:.8rem;color:var(--red);margin-top:8px;}
+</style>
+</head>
+<body>
+<div class="app">
+
+<!-- header -->
+<header>
+  <h1>🎤 Speech <span>Therapy</span></h1>
+  <div class="pills">
+    <span class="pill" id="pSrv">connecting…</span>
+    <span class="pill" id="pRec">idle</span>
+    <span class="pill" id="pCal" onclick="openCalibration()" style="cursor:pointer" title="Calibrate voice">🔧 calibrate</span>
+  </div>
+</header>
+
+<div id="errBar"></div>
+
+<!-- tabs -->
+<div class="tabs">
+  <button class="tab-btn active" id="tBtn0" onclick="switchTab(0)">🎙️ Live Transcribe</button>
+  <button class="tab-btn"        id="tBtn1" onclick="switchTab(1)">📝 Exercise</button>
+  <button class="tab-btn"        id="tBtn2" onclick="switchTab(2)">🔤 Phonemes</button>
+  <button class="tab-btn"        id="tBtn3" onclick="switchTab(3)">📊 History</button>
+  <button class="tab-btn"        id="tBtn4" onclick="switchTab(4)">🔒 Clinician</button>
+</div>
+
+<!-- ══════════════ TRANSCRIBE TAB ══════════════ -->
+<div id="tab0">
+
+  <div class="rec-card">
+    <!-- lip camera -->
+    <div class="cam-wrap" id="camWrap">
+      <video id="lipVideo" autoplay playsinline muted></video>
+      <canvas id="lipCanvas"></canvas>
+      <div class="cam-status" id="camStatus">📷 camera off</div>
+    </div>
+    <!-- audio controls -->
+    <div class="rec-controls">
+      <div class="wave-wrap"><canvas id="wave"></canvas></div>
+      <button class="mic-btn" id="micBtn" onclick="toggle()">
+        <span class="ico">🎙️</span>
+        <span id="micLbl">Start</span>
+      </button>
+      <p class="hint" id="micHint">Click to begin — speak naturally in Australian English</p>
+    </div>
+  </div>
+
+  <div class="row">
+    <div class="panel">
+      <h2>What you said</h2>
+      <div class="txt-out" id="txtOut"><span class="empty">Your speech appears here…</span></div>
+    </div>
+    <div class="panel">
+      <h2>IPA — Australian English</h2>
+      <div class="ipa-out" id="ipaOut"><span class="empty">Pronunciation symbols here…</span></div>
+    </div>
+  </div>
+
+  <div id="wordSec" style="display:none;flex-direction:column;gap:10px">
+    <p class="sec-lbl">Tap a word to see its phonemes</p>
+    <div id="wCards"></div>
+  </div>
+
+  <div id="phDetail">
+    <h2>Phonemes — tap a sound for detail</h2>
+    <div class="ph-scroll" id="phScroll"></div>
+    <div id="phBox"></div>
+  </div>
+
+</div><!-- #tab0 -->
+
+<!-- ══════════════ EXERCISE TAB ══════════════ -->
+<div id="tab1" style="display:none;flex-direction:column;gap:16px">
+
+  <!-- score tracker -->
+  <div class="score-tracker">
+    <div>
+      <div class="sc-num sc-correct" id="exCorrect">0</div>
+      <div class="sc-lbl">correct</div>
+    </div>
+    <div>
+      <div class="sc-num sc-attempts" id="exAttempts">0</div>
+      <div class="sc-lbl">attempts</div>
+    </div>
+    <div style="flex:1">
+      <div class="progress-bar-wrap">
+        <div class="progress-bar-bg"><div class="progress-bar-fill" id="exBar" style="width:0%"></div></div>
+        <div class="progress-text" id="exBarLbl">—</div>
+      </div>
+    </div>
+    <button onclick="resetScore()" style="padding:6px 14px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--muted);font-size:.78rem;cursor:pointer;">Reset</button>
+  </div>
+
+  <div class="ex-layout">
+
+    <!-- Left: categories + word list -->
+    <div style="display:flex;flex-direction:column;gap:14px">
+      <div class="panel" style="padding:14px">
+        <h2>Category</h2>
+        <div class="cat-list" id="catList"></div>
+      </div>
+      <div class="panel" style="padding:14px">
+        <h2>Words</h2>
+        <div class="word-chips" id="wordChips"></div>
+      </div>
+    </div>
+
+    <!-- Right: practice area -->
+    <div style="display:flex;flex-direction:column;gap:14px">
+      <div class="panel" id="practicePanel">
+        <div id="noWordMsg" style="color:var(--muted);font-style:italic;font-size:.9rem;padding:20px 0">← Select a category and word to begin</div>
+        <div id="practiceContent" style="display:none">
+          <div class="target-big" id="exWord">—</div>
+          <div class="target-ipa" id="exIpa">—</div>
+          <div class="ph-target-row" id="exTargetPh"></div>
+          <div style="margin-top:6px;font-size:.78rem;color:var(--muted)" id="exHintText"></div>
+
+          <!-- hear it button — shown before Record so the flow is: hear → attempt -->
+          <div style="margin-top:14px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+            <button class="hear-btn" id="hearBtn" onclick="playTarget()">
+              <span id="hearIco">▶</span>
+              <span id="hearLbl">Hear it</span>
+            </button>
+            <span class="hear-source" id="hearSource"></span>
+          </div>
+
+          <div style="display:flex;align-items:flex-start;gap:16px;flex-wrap:wrap;margin-top:4px">
+            <div>
+              <button class="ex-rec-btn" id="exRecBtn" onclick="startExercise()">
+                <span id="exRecIco">🎙️</span>
+                <span id="exRecLbl">Say it!</span>
+              </button>
+              <div class="ex-timer" id="exTimerLbl"></div>
+            </div>
+            <!-- lip camera -->
+            <div class="ex-cam-wrap" id="exCamWrap" style="display:none">
+              <video id="exLipVideo" autoplay playsinline muted></video>
+              <canvas id="exLipCanvas"></canvas>
+              <div class="cam-status" id="exCamStatus">📷 starting…</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Result appears here after recording -->
+      <div id="exResultPanel" style="display:none"></div>
+    </div>
+
+  </div>
+</div><!-- #tab1 -->
+
+<!-- ══════════════ PHONEME TAB ══════════════ -->
+<div id="tab2" style="display:none;flex-direction:column;gap:16px">
+
+  <!-- filter row -->
+  <div class="panel" style="padding:14px">
+    <div class="ph-filter-row" id="phFilterRow"></div>
+  </div>
+
+  <!-- phoneme grid -->
+  <div class="ph-grid" id="phGrid"></div>
+
+  <!-- practice panel (hidden until a card is clicked) -->
+  <div class="ph-practice-panel" id="phPracticePanel" style="display:none">
+    <h3 id="phPracticeTitle">Practising</h3>
+    <div class="ph-practice-top">
+      <div>
+        <div class="ph-practice-symbol" id="phPracticeSym"></div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:10px">
+        <div id="phPracticeInfo"></div>
+        <div class="ph-say-word" id="phSayWord"></div>
+        <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap">
+          <button class="ph-rec-btn" id="phRecBtn" onclick="startPhRecord()">
+            <span id="phRecIco">🎙️</span><span id="phRecLbl">Record</span>
+          </button>
+          <span style="font-size:.78rem;color:var(--muted)" id="phRecTimer"></span>
+        </div>
+        <div id="phResultBox"></div>
+      </div>
+    </div>
+  </div>
+
+</div><!-- #tab2 -->
+
+<!-- ══════════════ HISTORY TAB ══════════════ -->
+<div id="tab3" style="display:none;flex-direction:column;gap:16px">
+
+  <!-- top bar -->
+  <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px">
+    <div>
+      <p class="sec-lbl">Progress History</p>
+      <p style="font-size:.8rem;color:var(--muted);margin-top:2px">Every exercise attempt is saved automatically.</p>
+    </div>
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+      <select id="histDays" onchange="loadHistory()" style="padding:7px 12px;border-radius:8px;border:1px solid var(--border);background:#0f0f22;color:var(--text);font-size:.82rem;">
+        <option value="7">Last 7 days</option>
+        <option value="14">Last 14 days</option>
+        <option value="30">Last 30 days</option>
+      </select>
+      <button onclick="openReport()" style="padding:8px 16px;border-radius:8px;border:1px solid var(--purple);background:#1a0d3a;color:var(--text);font-size:.82rem;font-weight:700;cursor:pointer;">🖨 Print Report</button>
+    </div>
+  </div>
+
+  <!-- summary stats -->
+  <div class="hist-stats" id="histStats">
+    <div class="hist-stat"><div class="hs-num">—</div><div class="hs-lbl">Total attempts</div></div>
+  </div>
+
+  <!-- word breakdown table -->
+  <div class="panel" id="histTablePanel" style="padding:0;overflow:hidden">
+    <table class="hist-table" id="histTable">
+      <thead><tr>
+        <th>Word</th><th>Attempts</th><th>Accuracy</th>
+        <th>Trend</th><th>F1 avg Δ</th><th>Lisp risk</th><th>Streak</th>
+      </tr></thead>
+      <tbody id="histBody"><tr><td colspan="7" style="text-align:center;color:var(--muted);padding:20px">Loading…</td></tr></tbody>
+    </table>
+  </div>
+
+  <!-- recent attempts -->
+  <p class="sec-lbl">Recent Attempts</p>
+  <div class="recent-list" id="recentList"></div>
+
+</div><!-- #tab3 -->
+
+<!-- ══════════════ CLINICIAN TAB ══════════════ -->
+<div id="tab4" style="display:none;flex-direction:column;gap:16px">
+
+  <!-- password gate -->
+  <div id="clinGate">
+    <div class="clin-gate">
+      <div style="font-size:2.5rem">🔒</div>
+      <h2>Clinician Mode</h2>
+      <p>Record your voice saying each exercise word. Patients will be compared to your recordings instead of textbook averages.</p>
+      <div class="clin-pw">
+        <input type="password" id="clinPwInput" placeholder="Password" onkeydown="if(event.key==='Enter')clinLogin()">
+        <button onclick="clinLogin()">Enter</button>
+      </div>
+      <p id="clinPwErr" style="color:var(--red);font-size:.8rem;display:none">Incorrect password</p>
+    </div>
+  </div>
+
+  <!-- main clinician UI (hidden until authenticated) -->
+  <div id="clinMain" style="display:none;flex-direction:column;gap:16px">
+
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px">
+      <div>
+        <p class="sec-lbl">Reference Recordings</p>
+        <p style="font-size:.8rem;color:var(--muted);margin-top:4px">Click a word to record your reference. Green = recorded.</p>
+      </div>
+      <div id="clinRefCount" style="font-size:.82rem;color:var(--muted)"></div>
+    </div>
+
+    <!-- word grid -->
+    <div class="ref-grid" id="refGrid"></div>
+
+    <!-- recording panel (shown when a word is selected) -->
+    <div class="clin-rec-area" id="clinRecArea" style="display:none">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;flex-wrap:wrap">
+        <div>
+          <div class="clin-word-big" id="clinWord">—</div>
+          <div class="clin-word-ipa" id="clinIpa">—</div>
+        </div>
+        <div id="clinExisting" style="display:none">
+          <span class="ref-badge">✓ Reference recorded</span>
+          <button onclick="clinDelete()" style="margin-left:8px;padding:4px 10px;border-radius:6px;border:1px solid var(--red);background:transparent;color:var(--red);font-size:.72rem;cursor:pointer;">Delete</button>
+        </div>
+      </div>
+
+      <p style="font-size:.85rem;color:var(--muted)">Say the word clearly in your natural voice. Recording stops automatically after 4 seconds.</p>
+
+      <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap">
+        <button class="clin-rec-btn" id="clinRecBtn" onclick="startClinRecord()">
+          <span id="clinRecIco">🎙️</span><span id="clinRecLbl">Record Reference</span>
+        </button>
+        <span style="font-size:.78rem;color:var(--muted)" id="clinRecTimer"></span>
+      </div>
+
+      <div id="clinResult" style="display:none"></div>
+    </div>
+
+  </div>
+
+</div><!-- #tab4 -->
+
+<!-- ══════════════ CALIBRATION MODAL ══════════════ -->
+<div id="calOverlay" class="cal-overlay" style="display:none">
+  <div class="cal-modal">
+    <div id="calScreen"><!-- filled by JS --></div>
+  </div>
+</div>
+
+</div><!-- .app -->
+
+<script>
+// ═══════════════════════════════════════════════════════════════════════════
+//  UTILITIES — must be first so everything below can use them
+// ═══════════════════════════════════════════════════════════════════════════
+function id(s)   { return document.getElementById(s); }
+function el(t,c) { const e=document.createElement(t); e.className=c; return e; }
+function qAll(s) { return document.querySelectorAll(s); }
+function esc(s)  { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function setPill(i,t,c){ const p=id(i); p.textContent=t; p.className='pill '+c; }
+function showErr(m){ const b=id('errBar'); b.style.display='block'; b.textContent='⚠️ '+m; }
+function hideErr() { id('errBar').style.display='none'; }
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  CONFIG
+// ═══════════════════════════════════════════════════════════════════════════
+const API       = 'http://localhost:5001';
+const CHUNK_MS  = 4000;
+const EX_REC_MS = 4000;   // exercise recording length
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  SHARED STATE
+// ═══════════════════════════════════════════════════════════════════════════
+let trStream=null, trRecorder=null, trAudioCtx=null, trAnalyser=null;
+let trWaveCtx=null, trWaveAF=null, trSendTimer=null, trChunks=[], trLive=false;
+
+let exData=[];          // all exercises from server
+let exCatId='';         // selected category id
+let exWord=null;        // selected exercise object
+let exRecording=false;
+let exRecTimer=null;
+let exCountTimer=null;
+let exCorrect=0, exAttempts=0;
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  SERVER HEALTH
+// ═══════════════════════════════════════════════════════════════════════════
+async function checkSrv() {
+  const p = id('pSrv');
+  const ctrl = new AbortController();
+  const t = setTimeout(()=>ctrl.abort(), 3000);
+  try {
+    const r = await fetch(API+'/health', {signal:ctrl.signal});
+    clearTimeout(t);
+    const d = await r.json();
+    const ok = d.whisper && d.espeak;
+    p.textContent = ok ? 'server ready' : (!d.whisper?'no whisper':'no espeak-ng');
+    p.className   = 'pill '+(ok?'ok':'bad');
+    if (ok) hideErr();
+  } catch {
+    clearTimeout(t);
+    p.textContent = 'server offline';
+    p.className   = 'pill bad';
+    showErr('Cannot reach '+API+' — run: python3 realtime_feedback.py in Terminal, then refresh.');
+  }
+}
+checkSrv();
+setInterval(checkSrv, 15000);
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  TAB SWITCHING
+// ═══════════════════════════════════════════════════════════════════════════
+function switchTab(n) {
+  [0,1,2,3,4].forEach(i => {
+    const t=id('tab'+i);
+    if(t) t.style.display = (i===n) ? (i===0?'block':'flex') : 'none';
+    const b=id('tBtn'+i);
+    if(b) b.classList.toggle('active', i===n);
+  });
+  if (n===1 && exData.length===0) loadExercises();
+  if (n===2) initPhonemeTab();
+  if (n===3) loadHistory();
+  if (n===4) initClinTab();
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  ──────────────── TRANSCRIBE TAB ────────────────
+// ═══════════════════════════════════════════════════════════════════════════
+async function toggle() { trLive ? stopTr() : await startTr(); }
+
+async function startTr() {
+  hideErr();
+  if (typeof MediaRecorder === 'undefined') { showErr('Browser does not support audio recording. Use Chrome or Firefox.'); return; }
+  try {
+    trStream = await navigator.mediaDevices.getUserMedia({audio:true,video:false});
+  } catch(e) {
+    const msgs={NotAllowedError:'Permission denied. Check macOS System Settings → Privacy → Microphone.',NotFoundError:'No microphone found.',NotReadableError:'Mic is in use by another app.'};
+    showErr(msgs[e.name]||('Mic error: '+e.name));
+    return;
+  }
+  try {
+    trAudioCtx=new AudioContext();
+    if(trAudioCtx.state==='suspended') await trAudioCtx.resume();
+    trAnalyser=trAudioCtx.createAnalyser(); trAnalyser.fftSize=256;
+    trAudioCtx.createMediaStreamSource(trStream).connect(trAnalyser);
+    trWaveCtx=id('wave').getContext('2d'); drawWave();
+  } catch(e){ console.warn('Waveform error:',e); }
+  const mime=['audio/webm;codecs=opus','audio/webm','audio/ogg;codecs=opus','audio/mp4',''].find(m=>m===''||MediaRecorder.isTypeSupported(m));
+  try {
+    trRecorder=new MediaRecorder(trStream, mime?{mimeType:mime}:{});
+  } catch(e){ showErr('Cannot create recorder: '+e.message); trStream.getTracks().forEach(t=>t.stop()); return; }
+  trChunks=[];
+  trRecorder.ondataavailable=e=>{if(e.data&&e.data.size>0) trChunks.push(e.data);};
+  trRecorder.onerror=e=>showErr('Recorder error: '+(e.error||e));
+  try { trRecorder.start(); } catch(e){ showErr('Cannot start recorder: '+e.message); return; }
+
+  // Pull audio every CHUNK_MS via requestData() — more reliable than timeslice
+  trSendTimer=setInterval(()=>{
+    if(!trLive||!trRecorder||trRecorder.state!=='recording') return;
+    trRecorder.requestData();          // fires ondataavailable asynchronously
+    setTimeout(()=>{
+      if(trChunks.length===0) return;
+      const mt=trRecorder.mimeType||mime||'audio/webm';
+      const blob=new Blob(trChunks,{type:mt}); trChunks=[];
+      sendTr(blob,mt);
+    }, 150);                           // small delay for event to arrive
+  }, CHUNK_MS);
+  trLive=true;
+  id('micBtn').classList.add('on'); id('micLbl').textContent='Stop';
+  id('micHint').textContent='Listening… speak naturally';
+  setPill('pRec','recording','ok');
+  setTimeout(startLipCam, 500);   // defer camera so it never races with mic setup
+}
+
+function stopTr() {
+  trLive=false; clearInterval(trSendTimer);
+  if(trRecorder&&trRecorder.state!=='inactive') trRecorder.stop();
+  if(trStream) trStream.getTracks().forEach(t=>t.stop());
+  if(trAudioCtx){trAudioCtx.close();trAudioCtx=null;}
+  cancelAnimationFrame(trWaveAF);
+  const cv=id('wave'); cv.getContext('2d').clearRect(0,0,cv.width,cv.height);
+  trRecorder=trStream=trAnalyser=null; trChunks=[];
+  id('micBtn').classList.remove('on'); id('micLbl').textContent='Start';
+  id('micHint').textContent='Click to begin — speak naturally in Australian English';
+  setPill('pRec','idle','');
+  stopLipCam();
+}
+
+async function sendTr(blob,mime) {
+  const ext=mime.includes('ogg')?'.ogg':mime.includes('mp4')?'.mp4':'.webm';
+  const form=new FormData(); form.append('audio',blob,'rec'+ext);
+  setPill('pRec','processing…','busy');
+  try {
+    const r=await fetch(API+'/transcribe',{method:'POST',body:form});
+    if(!r.ok){showErr('Server error '+r.status);return;}
+    const d=await r.json();
+    if(d.error){showErr(d.error);return;}
+    if(d.text) renderTr(d);
+  } catch(e){showErr('Network error: '+e.message);}
+  finally{if(trLive) setPill('pRec','recording','ok');}
+}
+
+function renderTr(d) {
+  hideErr();
+  id('txtOut').textContent=d.text||'—';
+  id('ipaOut').textContent=d.ipa||'—';
+  const ws=d.words||[];
+  const wSec=id('wordSec'), wC=id('wCards'); wC.innerHTML='';
+  if(ws.length){
+    wSec.style.display='flex';
+    ws.forEach(w=>{
+      const c=el('div','wc');
+      c.innerHTML=`<div class="ww">${esc(w.word)}</div><div class="wi">${esc(w.ipa)}</div>`;
+      c.onclick=()=>{qAll('.wc').forEach(x=>x.classList.remove('sel'));c.classList.add('sel');showPhonemes(w.phonemes);};
+      wC.appendChild(c);
+    });
+    wC.firstChild&&wC.firstChild.click();
+  } else { wSec.style.display='none'; if(d.phonemes&&d.phonemes.length) showPhonemes(d.phonemes); }
+}
+
+// waveform
+function drawWave() {
+  const cv=id('wave'), W=cv.parentElement.offsetWidth, H=cv.parentElement.offsetHeight;
+  cv.width=W; cv.height=H;
+  const buf=new Uint8Array(trAnalyser.frequencyBinCount);
+  function frame(){
+    trWaveAF=requestAnimationFrame(frame);
+    trAnalyser.getByteTimeDomainData(buf);
+    trWaveCtx.clearRect(0,0,W,H);
+    trWaveCtx.strokeStyle='#7c3aed'; trWaveCtx.lineWidth=2; trWaveCtx.beginPath();
+    const step=W/buf.length;
+    buf.forEach((v,i)=>{const x=i*step,y=(v/255)*H;i?trWaveCtx.lineTo(x,y):trWaveCtx.moveTo(x,y);});
+    trWaveCtx.stroke();
+  }
+  frame();
+}
+
+// ── phoneme strip (transcribe tab) ───────────────────────────────────────────
+function showPhonemes(phonemes) {
+  const det=id('phDetail'), scr=id('phScroll');
+  if(!phonemes||!phonemes.length){det.style.display='none';return;}
+  det.style.display='block'; scr.innerHTML=''; id('phBox').style.display='none';
+  phonemes.forEach(ph=>{
+    const info=DB[ph]||{name:'Unknown',desc:'',example:'',tip:'',shape:'neutral',color:'#94a3b8'};
+    const c=el('div','phc');
+    c.innerHTML=`<span class="sym" style="color:${info.color}">${esc(ph)}</span>${mouth(info.shape)}<span class="nm">${esc(info.name.split(' ')[0])}</span>`;
+    c.onclick=()=>{qAll('.phc').forEach(x=>x.classList.remove('on'));c.classList.add('on');showInfo(ph,info);};
+    scr.appendChild(c);
+  });
+  scr.firstChild&&scr.firstChild.click();
+}
+function showInfo(ph,info){
+  const b=id('phBox'); b.style.display='block';
+  b.innerHTML=`<div class="ps" style="color:${info.color}">${esc(ph)}</div><div class="pn">${esc(info.name)}</div><div class="pd">${esc(info.desc)}</div>${info.example?`<div class="pe">Example: ${info.example}</div>`:''} ${info.tip?`<div class="pt">💡 ${esc(info.tip)}</div>`:''}`;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  ──────────────── EXERCISE TAB ────────────────
+// ═══════════════════════════════════════════════════════════════════════════
+async function loadExercises() {
+  try {
+    const r = await fetch(API+'/exercises');
+    exData = await r.json();
+    buildCategoryList();
+  } catch(e) { showErr('Could not load exercises: '+e.message); }
+}
+
+function buildCategoryList() {
+  const seen=new Map();
+  exData.forEach(e=>{if(!seen.has(e.cat_id)) seen.set(e.cat_id,{id:e.cat_id,name:e.category,emoji:e.emoji});});
+  const cl=id('catList'); cl.innerHTML='';
+  seen.forEach(cat=>{
+    const b=el('button','cat-btn');
+    b.textContent=cat.emoji+' '+cat.name;
+    b.onclick=()=>selectCategory(cat.id,b);
+    cl.appendChild(b);
+  });
+  // auto-select first
+  const first=cl.firstChild;
+  if(first) first.click();
+}
+
+function selectCategory(catId, btn) {
+  exCatId=catId;
+  qAll('.cat-btn').forEach(b=>b.classList.remove('sel'));
+  if(btn) btn.classList.add('sel');
+  const words=exData.filter(e=>e.cat_id===catId);
+  const wc=id('wordChips'); wc.innerHTML='';
+  words.forEach(w=>{
+    const isSentence = w.type==='sentence';
+    const b=el('button', isSentence ? 'ex-wc sentence-card' : 'ex-wc');
+    b.dataset.word=w.word;
+    if (isSentence) {
+      b.innerHTML = `<div style="font-size:.82rem;font-weight:700">${esc(w.sentence||w.word)}</div>
+                     <div style="font-size:.68rem;color:var(--purple);margin-top:3px">focus: /${esc(w.focus_phoneme||'')}/</div>`;
+    } else {
+      b.textContent=w.word;
+    }
+    b.onclick=()=>selectWord(w,b);
+    wc.appendChild(b);
+  });
+  const first=wc.firstChild;
+  if(first) first.click();
+}
+
+function selectWord(w, btn) {
+  exWord=w;
+  qAll('.ex-wc').forEach(b=>b.classList.remove('sel'));
+  if(btn) btn.classList.add('sel');
+  id('noWordMsg').style.display='none';
+  id('practiceContent').style.display='block';
+  id('exResultPanel').style.display='none';
+  // Stop any playing audio from previous word
+  if (_currentAudio) { _currentAudio.pause(); _currentAudio = null; }
+  resetHearBtn();
+  id('hearSource').textContent = '';
+  maybeStartExCam();
+
+  const isSentence = w.type === 'sentence';
+
+  if (isSentence) {
+    id('exWord').innerHTML = `<span class="sent-target">${esc(w.sentence||w.word)}</span>`;
+    id('exIpa').textContent = '';
+    id('exHintText').innerHTML =
+      `<span style="color:var(--purple);font-weight:700">Focus sound: /${esc(w.focus_phoneme||'')}/ </span>` +
+      esc(w.hint||'');
+    id('exTargetPh').innerHTML = '';
+  } else {
+    id('exWord').textContent = w.word;
+    id('exIpa').textContent  = w.ipa;
+    id('exHintText').textContent = w.hint||'';
+    const row=id('exTargetPh'); row.innerHTML='';
+    (w.phonemes||[]).forEach(ph=>{
+      const c=el('div','phx neutral'); c.textContent=ph; row.appendChild(c);
+    });
+  }
+
+  // set recording duration label
+  id('exRecLbl').textContent = isSentence ? 'Say it! (10 sec)' : 'Say it!';
+
+  // reset record button
+  const btn2=id('exRecBtn');
+  btn2.classList.remove('recording'); btn2.disabled=false;
+  id('exRecIco').textContent='🎙️'; id('exRecLbl').textContent='Say it!';
+  id('exTimerLbl').textContent='';
+}
+
+// ── hear it ───────────────────────────────────────────────────────────────────
+let _currentAudio = null;
+
+async function playTarget() {
+  if (!exWord) return;
+  const text = exWord.sentence || exWord.word;
+  const btn  = id('hearBtn');
+
+  // If already playing, stop
+  if (_currentAudio && !_currentAudio.paused) {
+    _currentAudio.pause();
+    _currentAudio.currentTime = 0;
+    resetHearBtn(); return;
+  }
+
+  btn.classList.add('playing'); btn.disabled = true;
+  id('hearIco').textContent = '⏳'; id('hearLbl').textContent = 'Loading…';
+  id('hearSource').textContent = '';
+
+  try {
+    const url  = `${API}/play?text=${encodeURIComponent(text)}`;
+    const resp = await fetch(url);
+    if (!resp.ok) { resetHearBtn(); return; }
+
+    const source = resp.headers.get('X-Audio-Source') || 'espeak';
+    id('hearSource').textContent =
+      source === 'reference' ? '👩‍⚕️ clinician\'s voice' : '🔊 synthesised voice';
+
+    const blob     = await resp.blob();
+    const audioUrl = URL.createObjectURL(blob);
+    _currentAudio  = new Audio(audioUrl);
+
+    id('hearIco').textContent = '⏸'; id('hearLbl').textContent = 'Playing…';
+    btn.disabled = false;
+
+    _currentAudio.onended = () => {
+      URL.revokeObjectURL(audioUrl);
+      resetHearBtn();
+    };
+    _currentAudio.onerror = () => { URL.revokeObjectURL(audioUrl); resetHearBtn(); };
+
+    await _currentAudio.play();
+  } catch(e) {
+    console.warn('playTarget:', e);
+    resetHearBtn();
+  }
+}
+
+function resetHearBtn() {
+  const btn = id('hearBtn');
+  if (!btn) return;
+  btn.classList.remove('playing'); btn.disabled = false;
+  id('hearIco').textContent = '▶'; id('hearLbl').textContent = 'Hear it';
+}
+
+// ── exercise recording ────────────────────────────────────────────────────────
+async function startExercise() {
+  if(exRecording||!exWord) return;
+  const btn=id('exRecBtn');
+  btn.classList.add('recording'); btn.disabled=true;
+  id('exRecIco').textContent='⏺'; id('exRecLbl').textContent='Recording…';
+
+  let stream;
+  try {
+    stream=await navigator.mediaDevices.getUserMedia({audio:true,video:false});
+  } catch(e){
+    showErr('Microphone error: '+e.name); resetExBtn(); return;
+  }
+
+  const mime=['audio/webm;codecs=opus','audio/webm','audio/ogg;codecs=opus','audio/mp4',''].find(m=>m===''||MediaRecorder.isTypeSupported(m));
+  let rec;
+  try { rec=new MediaRecorder(stream, mime?{mimeType:mime}:{}); }
+  catch(e){ showErr('Cannot create recorder: '+e.message); stream.getTracks().forEach(t=>t.stop()); resetExBtn(); return; }
+
+  const chunks=[]; exRecording=true;
+  lipFrameBuf=[]; collectingLip=true;   // start collecting lip frames
+  rec.ondataavailable=e=>{if(e.data&&e.data.size>0) chunks.push(e.data);};
+  const isSentence = exWord?.type === 'sentence';
+  const recDuration = isSentence ? 10000 : EX_REC_MS;
+
+  rec.onstop=async()=>{
+    stream.getTracks().forEach(t=>t.stop());
+    collectingLip=false;
+    const blob=new Blob(chunks,{type:rec.mimeType||'audio/webm'});
+    exRecording=false;
+    clearInterval(exCountTimer);
+    id('exTimerLbl').textContent='Analysing…';
+    await submitExercise(blob, rec.mimeType||mime||'audio/webm');
+    resetExBtn();
+  };
+  rec.start();
+
+  let remaining=Math.ceil(recDuration/1000);
+  id('exTimerLbl').textContent=`Recording for ${remaining}s…`;
+  exCountTimer=setInterval(()=>{
+    remaining--;
+    if(remaining>0) id('exTimerLbl').textContent=`Recording for ${remaining}s…`;
+  },1000);
+
+  exRecTimer=setTimeout(()=>{
+    clearInterval(exCountTimer);
+    if(rec.state==='recording') rec.stop();
+  }, recDuration);
+}
+
+function resetExBtn(){
+  const btn=id('exRecBtn');
+  btn.classList.remove('recording'); btn.disabled=false;
+  id('exRecIco').textContent='🎙️'; id('exRecLbl').textContent='Try again!';
+  id('exTimerLbl').textContent='';
+}
+
+async function submitExercise(blob, mime) {
+  const ext=mime.includes('ogg')?'.ogg':mime.includes('mp4')?'.mp4':'.webm';
+  const form=new FormData();
+  form.append('audio',blob,'rec'+ext);
+  const isSentence = exWord?.type === 'sentence';
+
+  if (isSentence) {
+    form.append('target',          exWord.sentence || exWord.word);
+    form.append('focus_phoneme',   exWord.focus_phoneme || '');
+    try {
+      const r = await fetch(API+'/check_sentence', {method:'POST', body:form});
+      if(!r.ok){showErr('Server error '+r.status);return;}
+      const d = await r.json();
+      if(d.error){showErr(d.error);return;}
+      renderSentenceResult(d);
+    } catch(e){showErr('Network error: '+e.message);}
+    return;
+  }
+
+  form.append('target',exWord.word);
+  // Send calibration profile so server scales reference values
+  const calPayload = getCalibrationPayload();
+  if (calPayload) form.append('calibration', calPayload);
+  // Send averaged lip measurements if we have enough frames
+  if (lipFrameBuf.length >= 3) {
+    const n   = lipFrameBuf.length;
+    const jaw = lipFrameBuf.reduce((s,f)=>s+f.jaw_aperture,0)/n;
+    const rat = lipFrameBuf.reduce((s,f)=>s+f.lip_ratio,0)/n;
+    form.append('lip_data', JSON.stringify({ jaw_aperture:jaw, lip_ratio:rat, n_frames:n }));
+  }
+  lipFrameBuf=[];
+  try {
+    const r=await fetch(API+'/check',{method:'POST',body:form});
+    if(!r.ok){showErr('Server error '+r.status);return;}
+    const d=await r.json();
+    if(d.error){showErr(d.error);return;}
+    renderExResult(d);
+  } catch(e){showErr('Network error: '+e.message);}
+}
+
+// ── render sentence result ────────────────────────────────────────────────────
+function renderSentenceResult(d) {
+  exAttempts++;
+  const pct     = Math.round((d.word_score||0)*100);
+  const allOk   = pct === 100;
+  if (allOk) exCorrect++;
+  updateScore();
+
+  // Mark sentence card
+  const chip = document.querySelector(`.ex-wc[data-word="${esc(exWord.word)}"]`);
+  if (chip) { chip.classList.remove('done-ok','done-err'); chip.classList.add(allOk?'done-ok':'done-err'); }
+
+  const rp = id('exResultPanel'); rp.style.display='block';
+
+  // Badge
+  const badgeCls = pct>=95?'perfect':pct>=70?'good':pct>=50?'ok':'retry';
+  const badgeTxt = pct>=95?'Perfect!':pct>=70?'Almost!':pct>=50?'Getting there':'Try again';
+  const emoji    = pct>=95?'🎉':pct>=70?'👍':pct>=50?'💪':'🔁';
+
+  // Word chips
+  const chips = (d.alignment||[]).map(a => {
+    const cls = a.status==='correct'?'wchip correct':a.status==='wrong'?'wchip wrong':a.status==='missing'?'wchip missing':'wchip extra';
+    const label = a.status==='wrong' ? `${esc(a.target)} <span style="font-size:.7rem;opacity:.7">(${esc(a.heard)})</span>`
+                : a.status==='extra' ? `<em>${esc(a.heard)}</em>`
+                : esc(a.target||a.heard||'?');
+    return `<div class="${cls}" title="${esc(a.status)}">${label}</div>`;
+  }).join('');
+
+  // Focus phoneme acoustic note
+  let acousticNote = '';
+  const fa = d.focus_acoustic;
+  if (fa && fa.friction) {
+    const f = fa.friction;
+    const col = f.lisp_risk==='high'?'var(--red)':f.lisp_risk==='moderate'?'var(--amber)':'var(--green)';
+    acousticNote = `<div style="margin-top:10px;font-size:.82rem;background:#0f0f22;border:1px solid var(--border);border-radius:8px;padding:10px 13px">
+      <strong style="color:var(--cyan)">/${esc(exWord.focus_phoneme||'')}/</strong> acoustic:
+      CoG ${f.CoG_hz?.toFixed(0)||'?'} Hz
+      <span style="color:${col};font-weight:700;margin-left:6px">lisp risk: ${f.lisp_risk||'—'}</span>
+      ${f.lisp_risk!=='low'?`<div style="color:${col};font-size:.75rem;margin-top:4px">${esc(f.lisp_note||'')}</div>`:''}
+    </div>`;
+  } else if (fa && fa.vowel) {
+    const v = fa.vowel;
+    acousticNote = `<div style="margin-top:10px;font-size:.82rem;background:#0f0f22;border:1px solid var(--border);border-radius:8px;padding:10px 13px">
+      <strong style="color:var(--cyan)">/${esc(exWord.focus_phoneme||'')}/</strong> average:
+      F1 ${v.F1_hz?.toFixed(0)||'?'} Hz · F2 ${v.F2_hz?.toFixed(0)||'?'} Hz
+    </div>`;
+  }
+
+  // Feedback card
+  const fb = d.feedback || {};
+  const feedbackHtml = `<div class="feedback-card">
+    <div class="feedback-headline">${esc(fb.headline||'')}</div>
+    ${(fb.tips||[]).map(t=>`<div class="feedback-tips"><div class="feedback-tip">${esc(t)}</div></div>`).join('')}
+  </div>`;
+
+  rp.innerHTML = `<div class="result-panel">
+    <div class="result-head">
+      <span class="result-label">${emoji} Sentence result — ${d.words_correct}/${d.words_total} words</span>
+      <span class="score-badge ${badgeCls}">${badgeTxt} ${pct}%</span>
+    </div>
+    ${feedbackHtml}
+    <div style="font-size:.78rem;color:var(--muted);margin-bottom:8px">I heard: <em style="color:var(--text)">"${esc(d.heard||'')}"</em></div>
+    <div class="word-chips-row">${chips}</div>
+    ${acousticNote}
+  </div>`;
+}
+
+// ── render exercise result ────────────────────────────────────────────────────
+function renderExResult(d) {
+  exAttempts++;
+  // Persist to server history (fire-and-forget)
+  saveAttempt({ ...d, word: exWord?.word });
+  const ph = d.alignment||[];
+  const allCorrect = ph.length>0 && ph.every(p=>p.status==='correct');
+  const score = d.score||0;
+  const wordOk = d.word_correct;
+
+  if(allCorrect && wordOk) exCorrect++;
+  updateScore();
+
+  // Mark word chip
+  const chip=document.querySelector(`.ex-wc[data-word="${exWord.word}"]`);
+  if(chip){
+    chip.classList.remove('done-ok','done-err');
+    chip.classList.add(allCorrect&&wordOk?'done-ok':'done-err');
+  }
+
+  // Build result panel
+  const rp=id('exResultPanel'); rp.style.display='block';
+
+  // Score badge
+  let badgeClass, badgeTxt, emoji;
+  if(!wordOk){badgeClass='retry';badgeTxt='Wrong word';emoji='❌';}
+  else if(score>=0.9){badgeClass='perfect';badgeTxt='Perfect!';emoji='🎉';}
+  else if(score>=0.7){badgeClass='good';badgeTxt='Almost!';emoji='👍';}
+  else if(score>=0.5){badgeClass='ok';badgeTxt='Getting there';emoji='💪';}
+  else{badgeClass='retry';badgeTxt='Try again';emoji='🔁';}
+
+  // Phoneme chips
+  let chipHTML='';
+  ph.forEach(p=>{
+    const cls=p.status;
+    const disp=p.target||p.heard||'?';
+    const badge=cls==='wrong'?`<span class="ph-badge">${esc(p.heard)}</span>`:cls==='missing'?'<span class="ph-badge">—</span>':'';
+    chipHTML+=`<div class="phx ${cls}" title="${cls==='wrong'?'You said: /'+esc(p.heard)+'/ but target is /'+esc(p.target)+'/':''}">${esc(disp)}${badge}</div>`;
+  });
+
+  // Interventions for wrong phonemes
+  const errors=ph.filter(p=>p.status==='wrong'||p.status==='missing');
+  let intvHTML='';
+  if(errors.length&&wordOk){
+    intvHTML='<div class="intervention"><p class="sec-lbl" style="margin-bottom:8px">📚 Sounds to work on</p>';
+    errors.forEach(e=>{
+      const tgt=e.target, hrd=e.heard;
+      const tInfo=DB[tgt]||{name:'Unknown',desc:'',tip:'',shape:'neutral',color:'#06b6d4'};
+      const hInfo=hrd?DB[hrd]||{name:hrd,desc:'',tip:'',shape:'neutral',color:'#ef4444'}:null;
+      intvHTML+=`<div class="intv-item">
+        <div class="intv-head">
+          <div class="intv-phonemes">
+            ${hrd?`<span class="ph-wrong">/${esc(hrd)}/</span><span class="arrow"> → </span>`:'<span class="arrow">missing </span>'}
+            <span class="ph-right">/${esc(tgt)}/</span>
+          </div>
+          <div>
+            <div class="intv-name">${esc(tInfo.name)}</div>
+            <div class="intv-desc">${esc(tInfo.desc)}</div>
+          </div>
+        </div>
+        <div class="intv-svgs">
+          ${hrd&&hInfo?`<div class="intv-svg-block"><span>You said /${esc(hrd)}/</span>${mouth(hInfo.shape)}</div>`:''}
+          <div class="intv-svg-block"><span>Should be /${esc(tgt)}/</span>${mouth(tInfo.shape)}</div>
+        </div>
+        ${tInfo.tip?`<div class="intv-tip">💡 ${esc(tInfo.tip)}</div>`:''}
+      </div>`;
+    });
+    intvHTML+='</div>';
+  }
+
+  // Motivational message
+  let msg='';
+  if(!wordOk) msg=`<p style="color:var(--red);font-size:.9rem;margin-top:10px">❌ I heard <strong>"${esc(d.heard_word||d.heard)}"</strong> — try saying <strong>"${esc(exWord.word)}"</strong> again.</p>`;
+  else if(allCorrect) msg=`<p style="color:var(--green);font-size:.9rem;margin-top:10px">🎉 Spot on Australian pronunciation!</p>`;
+  else msg=`<p style="color:var(--amber);font-size:.9rem;margin-top:10px">You said: <em style="font-family:monospace;color:var(--cyan)">${esc(d.heard_ipa)}</em></p>`;
+
+  const feedbackHTML = d.feedback ? renderFeedbackCard(d.feedback) : '';
+  const acousticHTML = d.acoustic ? renderAcousticPanel(d.acoustic) : '';
+  const lipHTML      = d.lip      ? renderLipPanel(d.lip)           : '';
+
+  rp.innerHTML=`<div class="result-panel">
+    <div class="result-head">
+      <span class="result-label">${emoji} Result for "${esc(exWord.word)}"</span>
+      <span class="score-badge ${badgeClass}">${badgeTxt}</span>
+    </div>
+    ${feedbackHTML}
+    <div class="heard-line">I heard: <strong>"${esc(d.heard)}"</strong></div>
+    <div class="ph-result-row">${chipHTML}</div>
+    ${msg}
+    ${intvHTML}
+    ${acousticHTML}
+    ${lipHTML}
+  </div>`;
+}
+
+// ── Patient feedback card ─────────────────────────────────────────────────────
+function renderFeedbackCard(fb) {
+  if (!fb) return '';
+  const praise = (fb.praise||[]).map(p=>`<div class="feedback-praise">✓ ${esc(p)}</div>`).join('');
+  const tips   = (fb.tips||[]).map(t=>`<div class="feedback-tip">${esc(t)}</div>`).join('');
+  return `<div class="feedback-card">
+    <div class="feedback-headline">${esc(fb.headline)}</div>
+    ${praise}
+    ${tips ? `<div class="feedback-tips">${tips}</div>` : ''}
+  </div>`;
+}
+
+// ── Acoustic panel renderer ───────────────────────────────────────────────────
+function renderAcousticPanel(ac) {
+  if (!ac || !ac.available) return '';
+  const segs = (ac.segments || []).filter(s => s.vowel || s.friction);
+  if (!segs.length && !ac.clinical_summary?.length) return '';
+
+  const methodLabels = { webmaus:'WebMAUS aligned', praat:'Praat estimated', equal:'equal division' };
+  const methodColors = { webmaus:'var(--green)', praat:'var(--cyan)', equal:'var(--muted)' };
+  const method = ac.align_method || 'equal';
+  const methodBadge = `<span style="font-size:.68rem;color:${methodColors[method]||'var(--muted)'};
+    background:#0f0f22;padding:2px 8px;border-radius:99px;border:1px solid currentColor;margin-left:8px">
+    ${methodLabels[method]||method}</span>`;
+  const refBadge = ac.using_reference
+    ? `<span style="font-size:.68rem;color:var(--green);background:#0d2a1e;padding:2px 8px;border-radius:99px;border:1px solid var(--green);margin-left:6px">👩‍⚕️ clinician reference</span>`
+    : '';
+  const calBadge = ac.using_calibration
+    ? `<span style="font-size:.68rem;color:var(--cyan);background:#0a1f28;padding:2px 8px;border-radius:99px;border:1px solid var(--cyan);margin-left:6px">🔧 calibrated ×${ac.scale_F1?.toFixed(2)}</span>`
+    : '';
+
+  let h = `<div class="acoustic-panel"><p class="acoustic-title">🔬 Acoustic Analysis ${methodBadge}${refBadge}${calBadge}</p>`;
+
+  segs.forEach(seg => {
+    const ph   = seg.phoneme;
+    const info = DB[ph] || { name: ph, color: '#94a3b8' };
+    const dur  = seg.general?.duration_ms?.toFixed(0) || '?';
+
+    h += `<div class="acou-seg">
+      <div class="acou-seg-head">
+        <span class="acou-ph" style="color:${info.color}">/${esc(ph)}/</span>
+        <span class="acou-label">${esc(info.name.replace(' (AuE)','').replace(' (vl)','').replace(' (vd)',''))}</span>
+        <span class="acou-dur">${dur} ms</span>
+      </div>`;
+
+    if (seg.vowel)    h += renderFormantBars(seg.vowel);
+    if (seg.friction) h += renderFricationBars(seg.friction);
+
+    h += '</div>';
+  });
+
+  if (ac.clinical_summary?.length) {
+    h += '<div class="clinical-box"><div class="clinical-box-title">📋 Clinician data</div>';
+    ac.clinical_summary.forEach(line => {
+      h += `<div class="clinical-line">${esc(line)}</div>`;
+    });
+    h += '</div>';
+  }
+
+  h += '</div>';
+  return h;
+}
+
+function renderFormantBars(v) {
+  // F1: 0–1400 Hz scale;  F2: 0–3200 Hz scale
+  const F1_MAX = 1400, F2_MAX = 3200;
+  const f1Pct    = +(v.F1_hz  / F1_MAX * 100).toFixed(1);
+  const f2Pct    = +(v.F2_hz  / F2_MAX * 100).toFixed(1);
+  const f1RefPct = +(v.F1_ref / F1_MAX * 100).toFixed(1);
+  const f2RefPct = +(v.F2_ref / F2_MAX * 100).toFixed(1);
+
+  const col = (diff, tight=100, loose=220) =>
+    Math.abs(diff) < tight ? '#10b981' : Math.abs(diff) < loose ? '#f59e0b' : '#ef4444';
+
+  const c1 = col(v.F1_diff), c2 = col(v.F2_diff, 150, 350);
+  const sign = n => (n >= 0 ? '+' : '') + n.toFixed(0);
+
+  const jawNote  = v.jaw_deviation  !== 'on target' ? `<div class="acou-note warn">↕ ${esc(v.jaw_deviation)}</div>`  : '';
+  const backNote = v.back_deviation !== 'on target' ? `<div class="acou-note warn">↔ ${esc(v.back_deviation)}</div>` : '';
+
+  return `
+    <div class="fmnt-row">
+      <span class="fmnt-name">F1</span>
+      <div class="fmnt-bg">
+        <div class="fmnt-ref" style="left:${f1RefPct}%"></div>
+        <div class="fmnt-bar" style="width:${Math.min(f1Pct,100)}%;background:${c1}"></div>
+      </div>
+      <span class="fmnt-val">${v.F1_hz.toFixed(0)} Hz</span>
+      <span class="fmnt-diff" style="color:${c1}">${sign(v.F1_diff)}</span>
+    </div>
+    <div class="fmnt-row">
+      <span class="fmnt-name">F2</span>
+      <div class="fmnt-bg">
+        <div class="fmnt-ref" style="left:${f2RefPct}%"></div>
+        <div class="fmnt-bar" style="width:${Math.min(f2Pct,100)}%;background:${c2}"></div>
+      </div>
+      <span class="fmnt-val">${v.F2_hz.toFixed(0)} Hz</span>
+      <span class="fmnt-diff" style="color:${c2}">${sign(v.F2_diff)}</span>
+    </div>
+    <div class="acou-conf">Formant confidence ${(v.confidence*100).toFixed(0)}%  ·  white line = target</div>
+    ${jawNote}${backNote}`;
+}
+
+function renderFricationBars(f) {
+  const CoG_MAX = 10000;
+  const valPct = Math.min(+(f.CoG_hz  / CoG_MAX * 100).toFixed(1), 100);
+  const refPct = Math.min(+(f.CoG_ref / CoG_MAX * 100).toFixed(1), 100);
+  const barCol = f.lisp_risk === 'high' ? '#ef4444' : f.lisp_risk === 'moderate' ? '#f59e0b' : '#10b981';
+  const badgeCls = f.lisp_risk === 'high' ? 'lisp-bad' : f.lisp_risk === 'moderate' ? 'lisp-mod' : 'lisp-ok';
+  const badgeIcon = f.lisp_risk === 'high' ? '🚨' : f.lisp_risk === 'moderate' ? '⚠️' : '✓';
+  const noteCls = f.lisp_risk === 'high' ? 'alert' : f.lisp_risk === 'moderate' ? 'warn' : 'good';
+
+  return `
+    <div class="cog-row">
+      <span style="font-size:.7rem;color:var(--muted);width:36px;flex-shrink:0">CoG</span>
+      <div class="cog-bg">
+        <div style="position:absolute;top:-2px;height:12px;width:2px;border-radius:1px;background:rgba(255,255,255,.3);left:${refPct}%"></div>
+        <div class="cog-bar" style="width:${valPct}%;background:${barCol}"></div>
+      </div>
+      <span style="font-size:.7rem;font-family:monospace;color:var(--cyan);width:65px;text-align:right;flex-shrink:0">${f.CoG_hz.toFixed(0)} Hz</span>
+    </div>
+    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:4px">
+      <span class="lisp-badge ${badgeCls}">${badgeIcon} Lisp risk: ${f.lisp_risk}</span>
+      <span style="font-size:.68rem;color:var(--muted)">ref ${f.CoG_ref.toFixed(0)} Hz · energy ${f.energy_db.toFixed(1)} dB</span>
+    </div>
+    ${f.lisp_note ? `<div class="acou-note ${noteCls}">${esc(f.lisp_note)}</div>` : ''}`;
+}
+
+function updateScore(){
+  id('exCorrect').textContent=exCorrect;
+  id('exAttempts').textContent=exAttempts;
+  const pct=exAttempts?Math.round(exCorrect/exAttempts*100):0;
+  id('exBar').style.width=pct+'%';
+  id('exBarLbl').textContent=exAttempts?`${pct}% accuracy (${exCorrect}/${exAttempts})`:'No attempts yet';
+}
+function resetScore(){ exCorrect=0; exAttempts=0; updateScore(); qAll('.ex-wc').forEach(c=>{c.classList.remove('done-ok','done-err');}); }
+
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  MOUTH SVG
+// ═══════════════════════════════════════════════════════════════════════════
+function mouth(shape){
+  const F='#2d1a1a',L='#9b5050',LD='#6b2828',T='#f0ece0',TG='#d47070',D='#110808';
+  const S={
+    bilabial:      `<ellipse cx="60" cy="37" rx="48" ry="26" fill="${F}"/><path d="M22,38 Q60,32 98,38 Q60,44 22,38" fill="${L}"/><path d="M24,38 Q60,37 96,38" stroke="${LD}" stroke-width="2" fill="none"/>`,
+    labiodental:   `<ellipse cx="60" cy="37" rx="48" ry="26" fill="${F}"/><rect x="28" y="28" width="64" height="8" rx="3" fill="${T}" opacity=".9"/><path d="M18,40 Q60,54 102,40" fill="${L}"/>`,
+    dental:        `<ellipse cx="60" cy="37" rx="48" ry="26" fill="${F}"/><rect x="28" y="26" width="64" height="7" rx="2" fill="${T}" opacity=".9"/><ellipse cx="60" cy="38" rx="27" ry="6" fill="${TG}"/><rect x="28" y="43" width="64" height="7" rx="2" fill="${T}" opacity=".8"/><path d="M18,49 Q60,58 102,49" fill="${L}"/>`,
+    'spread-close':`<ellipse cx="60" cy="37" rx="48" ry="26" fill="${F}"/><path d="M14,38 Q60,30 106,38" stroke="${LD}" stroke-width="2" fill="${LD}"/><path d="M14,38 Q60,46 106,38" fill="${L}"/><rect x="30" y="32" width="60" height="5" rx="2" fill="${T}" opacity=".85"/><rect x="30" y="40" width="60" height="4" rx="2" fill="${T}" opacity=".65"/>`,
+    'spread-mid':  `<ellipse cx="60" cy="37" rx="48" ry="26" fill="${F}"/><path d="M14,34 Q60,27 106,34 L100,48 Q60,54 20,48 Z" fill="${D}"/><path d="M14,34 Q60,27 106,34" fill="${LD}"/><path d="M20,48 Q60,54 100,48" fill="${L}"/><rect x="28" y="28" width="64" height="7" rx="2" fill="${T}" opacity=".8"/>`,
+    'spread-open': `<ellipse cx="60" cy="37" rx="48" ry="26" fill="${F}"/><path d="M14,30 Q60,22 106,30 L102,52 Q60,60 18,52 Z" fill="${D}"/><path d="M14,30 Q60,22 106,30" fill="${LD}"/><path d="M18,52 Q60,60 102,52" fill="${L}"/><rect x="26" y="24" width="68" height="8" rx="2" fill="${T}" opacity=".8"/><ellipse cx="60" cy="55" rx="24" ry="6" fill="${TG}" opacity=".8"/>`,
+    open:          `<ellipse cx="60" cy="37" rx="48" ry="26" fill="${F}"/><path d="M20,28 Q60,18 100,28 L98,54 Q60,62 22,54 Z" fill="${D}"/><path d="M20,28 Q60,18 100,28" fill="${L}"/><path d="M22,54 Q60,62 98,54" fill="${L}"/><ellipse cx="60" cy="56" rx="27" ry="7" fill="${TG}" opacity=".85"/>`,
+    'open-round':  `<ellipse cx="60" cy="37" rx="48" ry="26" fill="${F}"/><ellipse cx="60" cy="38" rx="28" ry="22" fill="${L}"/><ellipse cx="60" cy="38" rx="18" ry="16" fill="${D}"/><ellipse cx="60" cy="46" rx="14" ry="5" fill="${TG}" opacity=".6"/>`,
+    'mid-round':   `<ellipse cx="60" cy="37" rx="48" ry="26" fill="${F}"/><ellipse cx="60" cy="38" rx="24" ry="18" fill="${L}"/><ellipse cx="60" cy="38" rx="14" ry="11" fill="${D}"/>`,
+    rounded:       `<ellipse cx="60" cy="37" rx="48" ry="26" fill="${F}"/><ellipse cx="60" cy="38" rx="18" ry="14" fill="${L}"/><ellipse cx="60" cy="38" rx="9" ry="7" fill="${D}"/>`,
+    'rounded-close':`<ellipse cx="60" cy="37" rx="48" ry="26" fill="${F}"/><ellipse cx="60" cy="38" rx="13" ry="10" fill="${L}"/><ellipse cx="60" cy="38" rx="5" ry="4" fill="${D}"/>`,
+    alveolar:      `<ellipse cx="60" cy="37" rx="48" ry="26" fill="${F}"/><path d="M22,34 Q60,27 98,34 L96,46 Q60,52 24,46 Z" fill="${D}"/><path d="M22,34 Q60,27 98,34" fill="${LD}"/><path d="M24,46 Q60,52 96,46" fill="${L}"/><rect x="30" y="28" width="60" height="6" rx="2" fill="${T}" opacity=".75"/><rect x="30" y="44" width="60" height="5" rx="2" fill="${T}" opacity=".6"/>`,
+    velar:         `<ellipse cx="60" cy="37" rx="48" ry="26" fill="${F}"/><path d="M24,35 Q60,29 96,35 L94,47 Q60,53 26,47 Z" fill="${D}"/><path d="M24,35 Q60,29 96,35" fill="${LD}"/><path d="M26,47 Q60,53 94,47" fill="${L}"/>`,
+    postalveolar:  `<ellipse cx="60" cy="37" rx="48" ry="26" fill="${F}"/><ellipse cx="60" cy="38" rx="26" ry="14" fill="${L}"/><ellipse cx="60" cy="38" rx="16" ry="8" fill="${D}"/><rect x="34" y="33" width="52" height="5" rx="2" fill="${T}" opacity=".55"/>`,
+    neutral:       `<ellipse cx="60" cy="37" rx="48" ry="26" fill="${F}"/><path d="M26,36 Q60,30 94,36 L92,46 Q60,52 28,46 Z" fill="${D}"/><path d="M26,36 Q60,30 94,36" fill="${LD}"/><path d="M28,46 Q60,52 92,46" fill="${L}"/>`,
+  };
+  return `<svg viewBox="0 0 120 74" xmlns="http://www.w3.org/2000/svg">${S[shape]||S.neutral}</svg>`;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  EXERCISE LIP CAMERA — separate instance for the exercise tab
+// ═══════════════════════════════════════════════════════════════════════════
+
+let exLipMesh    = null;
+let exLipCam     = null;
+let exLipActive  = false;
+let lipFrameBuf  = [];      // frames collected during recording
+let collectingLip = false;  // true while exercise recording is live
+
+async function startExLipCam() {
+  if (exLipActive || typeof FaceMesh === 'undefined') return;
+  const video  = id('exLipVideo');
+  const canvas = id('exLipCanvas');
+  const wrap   = id('exCamWrap');
+  const status = id('exCamStatus');
+
+  wrap.style.display = 'block';
+  status.textContent = '⏳ starting…';
+
+  try {
+    exLipMesh = new FaceMesh({
+      locateFile: f => `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${f}`
+    });
+    exLipMesh.setOptions({ maxNumFaces:1, refineLandmarks:true,
+                           minDetectionConfidence:0.5, minTrackingConfidence:0.5 });
+    exLipMesh.onResults(r => onExLipFrame(r, canvas, status));
+
+    exLipCam = new Camera(video, {
+      onFrame: async () => { if (exLipMesh) await exLipMesh.send({ image: video }); },
+      width: 240, height: 180
+    });
+    await exLipCam.start();
+    exLipActive = true;
+  } catch(e) {
+    console.warn('Exercise lip cam:', e);
+    wrap.style.display = 'none';
+  }
+}
+
+function stopExLipCam() {
+  exLipActive = false; collectingLip = false; lipFrameBuf = [];
+  if (exLipCam)  { exLipCam.stop();   exLipCam  = null; }
+  if (exLipMesh) { exLipMesh.close(); exLipMesh = null; }
+  const video = id('exLipVideo');
+  if (video && video.srcObject) { video.srcObject.getTracks().forEach(t=>t.stop()); video.srcObject=null; }
+  id('exCamWrap').style.display = 'none';
+}
+
+function onExLipFrame(results, canvas, status) {
+  const W = canvas.offsetWidth  || 160;
+  const H = canvas.offsetHeight || 120;
+  if (canvas.width !== W)  canvas.width  = W;
+  if (canvas.height !== H) canvas.height = H;
+
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0, 0, W, H);
+
+  if (!results.multiFaceLandmarks || !results.multiFaceLandmarks.length) {
+    status.textContent = '👤 no face';
+    return;
+  }
+  status.innerHTML = '<span class="cam-pulse"></span>tracking';
+
+  const lm = results.multiFaceLandmarks[0];
+
+  // ── Collect measurements when recording ──────────────────────────────────
+  if (collectingLip) {
+    const faceH = Math.abs(lm[152].y - lm[10].y);
+    if (faceH > 0.08) {
+      const jawGap  = Math.abs(lm[14].y - lm[13].y);
+      const lipW    = Math.abs(lm[291].x - lm[61].x);
+      const lipH    = Math.abs(lm[17].y - lm[0].y);
+      lipFrameBuf.push({
+        jaw_aperture: jawGap / faceH,
+        lip_ratio:    lipW > 0.01 ? lipH / lipW : 0.25,
+      });
+    }
+  }
+
+  // ── Draw lip overlay (same style as transcribe tab) ──────────────────────
+  const px = i => lm[i].x * W;
+  const py = i => lm[i].y * H;
+  const F='#2d1a1a', L='#9b5050', LD='#6b2828', TG='#d47070', D='#110808';
+
+  ctx.beginPath();
+  LIP_OUTER.forEach((idx,i) => i ? ctx.lineTo(px(idx),py(idx)) : ctx.moveTo(px(idx),py(idx)));
+  ctx.closePath();
+  ctx.fillStyle='rgba(124,58,237,.22)'; ctx.fill();
+  ctx.strokeStyle='#7c3aed'; ctx.lineWidth=1.5; ctx.stroke();
+
+  ctx.beginPath();
+  LIP_INNER.forEach((idx,i) => i ? ctx.lineTo(px(idx),py(idx)) : ctx.moveTo(px(idx),py(idx)));
+  ctx.closePath();
+  ctx.strokeStyle='#06b6d4'; ctx.lineWidth=1; ctx.stroke();
+
+  LIP_DOTS.forEach(idx => {
+    ctx.beginPath(); ctx.arc(px(idx),py(idx),2,0,Math.PI*2);
+    ctx.fillStyle='#06b6d4'; ctx.fill();
+  });
+}
+
+// ── hook into exercise recording ──────────────────────────────────────────────
+// Called from selectWord() to start camera when word is chosen
+function maybeStartExCam() {
+  if (typeof FaceMesh !== 'undefined' && typeof Camera !== 'undefined') {
+    startExLipCam();
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  CALIBRATION
+// ═══════════════════════════════════════════════════════════════════════════
+
+// Five words that span the vowel space — easy to say, well-separated acoustically
+const CAL_WORDS = [
+  { word:'beat',    phoneme:'iː', hint:'Long EE — like smiling big' },
+  { word:'cat',     phoneme:'æ',  hint:'Short A — drop your jaw wide open' },
+  { word:'boot',    phoneme:'uː', hint:'Long OO — round lips forward' },
+  { word:'cup',     phoneme:'ʌ',  hint:'Short U — relax completely' },
+  { word:'thought', phoneme:'ɔː', hint:'AW sound — round lips, tongue back' },
+];
+
+const CAL_KEY = 'speakflow_cal_v1';
+let calMeasurements = [];  // { phoneme, F1, F2, F1_ref, F2_ref }
+let calStep         = 0;
+let calRecording    = false;
+
+function loadCalibration() {
+  try { return JSON.parse(localStorage.getItem(CAL_KEY) || 'null'); }
+  catch { return null; }
+}
+
+function saveCalibration(profile) {
+  localStorage.setItem(CAL_KEY, JSON.stringify(profile));
+  updateCalBadge();
+}
+
+function updateCalBadge() {
+  const p = id('pCal');
+  const c = loadCalibration();
+  if (c) {
+    p.textContent = '✓ calibrated';
+    p.className   = 'pill ok';
+    p.title       = `Calibrated ${c.calibratedAt} — ${c.profile} (F1×${c.scaleF1.toFixed(2)})`;
+  } else {
+    p.textContent = '🔧 calibrate';
+    p.className   = 'pill';
+    p.title       = 'Calibrate for your voice';
+  }
+}
+updateCalBadge();
+
+function openCalibration() {
+  calMeasurements = [];
+  calStep = -1;
+  id('calOverlay').style.display = 'flex';
+  renderCalStep();
+}
+
+function closeCalibration() {
+  id('calOverlay').style.display = 'none';
+}
+
+function renderCalStep() {
+  const screen = id('calScreen');
+
+  // Intro screen
+  if (calStep === -1) {
+    const existing = loadCalibration();
+    screen.innerHTML = `
+      <div class="cal-step-lbl">Voice Calibration</div>
+      <div style="font-size:2rem">🎤</div>
+      <p style="font-size:.9rem;color:var(--text);max-width:300px">
+        SpeakFlow will listen to your voice saying 5 simple words and adjust its targets to match <em>your</em> vocal range — not a textbook average.
+      </p>
+      ${existing ? `<div class="cal-badge">✓ Already calibrated — ${existing.profile}</div>` : ''}
+      <p class="cal-hint">Takes about 30 seconds. Say each word naturally and hold the vowel for 1 second.</p>
+      <button class="cal-rec-btn" onclick="calStep=0;renderCalStep()">Start Calibration →</button>
+      <button onclick="closeCalibration()" style="background:transparent;border:none;color:var(--muted);font-size:.82rem;cursor:pointer;margin-top:4px">Cancel</button>`;
+    return;
+  }
+
+  // Recording steps
+  if (calStep < CAL_WORDS.length) {
+    const w   = CAL_WORDS[calStep];
+    const pct = (calStep / CAL_WORDS.length * 100).toFixed(0);
+    screen.innerHTML = `
+      <div class="cal-step-lbl">Step ${calStep+1} of ${CAL_WORDS.length}</div>
+      <div class="cal-progress"><div class="cal-bar" style="width:${pct}%"></div></div>
+      <p class="cal-hint">Say this word clearly:</p>
+      <div class="cal-word">${esc(w.word.toUpperCase())}</div>
+      <p class="cal-hint">${esc(w.hint)}</p>
+      <button class="cal-rec-btn" id="calRecBtn" onclick="startCalRecord()">
+        <span id="calRecIco">🎙️</span><span id="calRecLbl">Record (3 sec)</span>
+      </button>
+      <span style="font-size:.78rem;color:var(--muted)" id="calTimer"></span>
+      <div id="calWordResult"></div>`;
+    return;
+  }
+
+  // Results screen
+  const scaleF1 = calMeasurements.reduce((s,m)=>s+m.F1/m.F1_ref,0)/calMeasurements.length;
+  const scaleF2 = calMeasurements.reduce((s,m)=>s+m.F2/m.F2_ref,0)/calMeasurements.length;
+  const avgF1   = calMeasurements.reduce((s,m)=>s+m.F1,0)/calMeasurements.length;
+  const profile = avgF1 > 900 ? 'Child / higher voice' : avgF1 > 700 ? 'Adult female / teen' : 'Adult male';
+
+  saveCalibration({ scaleF1, scaleF2, profile, calibratedAt: new Date().toLocaleDateString() });
+
+  const rows = calMeasurements.map(m =>
+    `<div style="display:flex;gap:12px;justify-content:space-between;font-size:.78rem">
+       <span style="font-family:monospace;color:var(--cyan)">/${esc(m.phoneme)}/</span>
+       <span>F1 ${m.F1.toFixed(0)} Hz <span style="color:var(--muted)">(ref ${m.F1_ref})</span></span>
+       <span>F2 ${m.F2.toFixed(0)} Hz <span style="color:var(--muted)">(ref ${m.F2_ref})</span></span>
+     </div>`
+  ).join('');
+
+  screen.innerHTML = `
+    <div class="cal-step-lbl">Calibration Complete ✓</div>
+    <div class="cal-progress"><div class="cal-bar" style="width:100%"></div></div>
+    <div class="cal-profile">
+      <div class="cal-profile-title">Your voice profile</div>
+      <div style="font-weight:700;margin-bottom:8px">${esc(profile)}</div>
+      <div style="font-size:.72rem;color:var(--muted);margin-bottom:8px">Scale factors: F1×${scaleF1.toFixed(2)} · F2×${scaleF2.toFixed(2)}</div>
+      ${rows}
+    </div>
+    <p class="cal-hint">All exercise comparisons will now use these adjusted targets.</p>
+    <button class="cal-rec-btn" onclick="closeCalibration()">Done ✓</button>
+    <button onclick="calStep=-1;calMeasurements=[];renderCalStep()" style="background:transparent;border:none;color:var(--muted);font-size:.78rem;cursor:pointer;margin-top:4px">Recalibrate</button>`;
+}
+
+async function startCalRecord() {
+  if (calRecording) return;
+  const w = CAL_WORDS[calStep];
+
+  id('calRecBtn').classList.add('recording');
+  id('calRecBtn').disabled = true;
+  id('calRecIco').textContent = '⏺';
+  id('calRecLbl').textContent = 'Recording…';
+
+  let stream;
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+  } catch(e) { showErr('Mic error: ' + e.name); resetCalBtn(); return; }
+
+  const mime = ['audio/webm;codecs=opus','audio/webm','audio/ogg;codecs=opus','audio/mp4','']
+    .find(m => m==='' || MediaRecorder.isTypeSupported(m));
+  const rec    = new MediaRecorder(stream, mime ? {mimeType:mime} : {});
+  const chunks = [];
+  calRecording = true;
+
+  rec.ondataavailable = e => { if(e.data && e.data.size>0) chunks.push(e.data); };
+  rec.onstop = async () => {
+    stream.getTracks().forEach(t => t.stop());
+    calRecording = false;
+    id('calTimer').textContent = 'Analysing…';
+    const blob = new Blob(chunks, { type: rec.mimeType || 'audio/webm' });
+    await processCal(blob, rec.mimeType || mime || 'audio/webm', w);
+  };
+
+  rec.start();
+  let secs = 3;
+  id('calTimer').textContent = `Recording for ${secs}s…`;
+  const countdown = setInterval(() => {
+    secs--;
+    if(secs>0) id('calTimer').textContent=`Recording for ${secs}s…`;
+    else clearInterval(countdown);
+  }, 1000);
+  setTimeout(() => { clearInterval(countdown); if(rec.state==='recording') rec.stop(); }, 3000);
+}
+
+async function processCal(blob, mime, word) {
+  const ext  = mime.includes('ogg')?'.ogg':mime.includes('mp4')?'.mp4':'.webm';
+  const form = new FormData();
+  form.append('audio',   blob, 'cal'+ext);
+  form.append('phoneme', word.phoneme);
+
+  try {
+    const r = await fetch(API+'/calibrate_word', { method:'POST', body:form });
+    const d = await r.json();
+
+    if (d.error) {
+      id('calWordResult').innerHTML =
+        `<div class="cal-result err">❌ ${esc(d.error)}</div>`;
+      resetCalBtn();
+      return;
+    }
+
+    calMeasurements.push({
+      phoneme: d.phoneme, word: word.word,
+      F1: d.F1, F2: d.F2, confidence: d.confidence,
+      F1_ref: d.F1_ref, F2_ref: d.F2_ref,
+    });
+
+    id('calWordResult').innerHTML =
+      `<div class="cal-result ok">✓ Got it! F1=${d.F1.toFixed(0)} Hz · F2=${d.F2.toFixed(0)} Hz</div>`;
+
+    setTimeout(() => { calStep++; renderCalStep(); }, 900);
+
+  } catch(e) {
+    id('calWordResult').innerHTML =
+      `<div class="cal-result err">Network error: ${esc(e.message)}</div>`;
+    resetCalBtn();
+  }
+}
+
+function resetCalBtn() {
+  const btn = id('calRecBtn');
+  if (!btn) return;
+  btn.classList.remove('recording'); btn.disabled=false;
+  id('calRecIco').textContent='🎙️'; id('calRecLbl').textContent='Try again';
+  id('calTimer').textContent='';
+}
+
+// Attach calibration to /check calls
+function getCalibrationPayload() {
+  const c = loadCalibration();
+  return c ? JSON.stringify({ scaleF1: c.scaleF1, scaleF2: c.scaleF2 }) : null;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  HISTORY TAB
+// ═══════════════════════════════════════════════════════════════════════════
+
+async function loadHistory() {
+  const days = id('histDays')?.value || 7;
+  try {
+    const [sumR, recR] = await Promise.all([
+      fetch(`${API}/history?days=${days}`),
+      fetch(`${API}/history/recent?limit=30`),
+    ]);
+    const sum = await sumR.json();
+    const rec = await recR.json();
+    renderHistStats(sum);
+    renderHistTable(sum.words || []);
+    renderRecentList(rec);
+  } catch(e) {
+    id('histBody').innerHTML = `<tr><td colspan="7" style="color:var(--red)">Could not load history: ${esc(e.message)}</td></tr>`;
+  }
+}
+
+function renderHistStats(s) {
+  const pctCol = s.pct >= 80 ? 'var(--green)' : s.pct >= 50 ? 'var(--amber)' : 'var(--red)';
+  id('histStats').innerHTML = `
+    <div class="hist-stat"><div class="hs-num">${s.total||0}</div><div class="hs-lbl">Attempts (${s.days}d)</div></div>
+    <div class="hist-stat"><div class="hs-num" style="color:${pctCol}">${s.pct||0}%</div><div class="hs-lbl">Accuracy</div></div>
+    <div class="hist-stat"><div class="hs-num">${s.correct||0}</div><div class="hs-lbl">Correct</div></div>
+    <div class="hist-stat"><div class="hs-num">${s.n_words||0}</div><div class="hs-lbl">Words practised</div></div>`;
+}
+
+function renderHistTable(words) {
+  if (!words.length) {
+    id('histBody').innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:20px">No attempts yet — practise some words in the Exercise tab!</td></tr>';
+    return;
+  }
+  id('histBody').innerHTML = words.map(w => {
+    const pctCol = w.pct>=80?'var(--green)':w.pct>=50?'var(--amber)':'var(--red)';
+    const trendCls = w.trend?.includes('↑')?'trend-up':w.trend?.includes('↓')?'trend-dn':'trend-st';
+    const f1cell = w.f1_avg!=null ? `<span style="color:${Math.abs(w.f1_avg)<80?'var(--green)':'var(--amber)'}">${w.f1_avg>0?'+':''}${w.f1_avg} Hz</span>` : '—';
+    const lispCol = w.lisp_risk==='high'?'var(--red)':w.lisp_risk==='moderate'?'var(--amber)':'var(--green)';
+    const streak = w.streak>=3 ? `<span style="color:var(--amber)">🔥${w.streak}</span>` :
+                   w.streak>=1 ? `<span style="color:var(--green)">${w.streak}</span>` : '0';
+    return `<tr>
+      <td><strong>${esc(w.word)}</strong></td>
+      <td>${w.n}</td>
+      <td style="color:${pctCol}">${w.pct}%</td>
+      <td class="${trendCls}">${esc(w.trend||'—')}</td>
+      <td>${f1cell}</td>
+      <td style="color:${lispCol}">${esc(w.lisp_risk||'—')}</td>
+      <td>${streak}</td>
+    </tr>`;
+  }).join('');
+}
+
+function renderRecentList(attempts) {
+  const el2 = id('recentList');
+  if (!attempts.length) { el2.innerHTML = '<p style="color:var(--muted);font-size:.85rem">No recent attempts.</p>'; return; }
+  el2.innerHTML = attempts.map(a => {
+    const pct   = Math.round((a.score||0)*100);
+    const col   = pct>=80?'var(--green)':pct>=50?'var(--amber)':'var(--red)';
+    const tick  = a.word_correct ? '✓' : '✗';
+    const tickC = a.word_correct ? 'var(--green)' : 'var(--red)';
+    const ts    = a.attempted_at ? a.attempted_at.replace('T',' ').replace('Z','').slice(0,16) : '';
+    return `<div class="recent-item">
+      <span style="color:${tickC};font-weight:700;font-size:1rem">${tick}</span>
+      <span class="recent-word">${esc(a.word)}</span>
+      <span class="recent-ipa">${esc(a.heard_ipa||'')}</span>
+      <span class="recent-score" style="color:${col}">${pct}%</span>
+      <span class="recent-time">${esc(ts)}</span>
+    </div>`;
+  }).join('');
+}
+
+function openReport() {
+  const days = id('histDays')?.value || 7;
+  window.open(`${API}/report.html?days=${days}`, '_blank');
+}
+
+// Auto-save attempt after every exercise result
+async function saveAttempt(d) {
+  if (!d || !d.word) return;
+  try {
+    await fetch(API + '/attempt', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify(d),
+    });
+  } catch(e) { console.warn('[history] save failed:', e.message); }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  CLINICIAN TAB
+// ═══════════════════════════════════════════════════════════════════════════
+
+let clinPassword  = '';
+let clinAuthed    = false;
+let clinWord      = null;   // currently selected exercise object
+let clinRecording = false;
+let clinRefs      = {};     // cached reference index from server
+
+function initClinTab() {
+  // nothing to do until authenticated
+}
+
+function clinLogin() {
+  const pw = id('clinPwInput').value;
+  const errEl = id('clinPwErr');
+  // Quick client-side check — real auth is server-side via header
+  fetch(API + '/clinician/references', {
+    headers: { 'X-Clinician-Password': pw }
+  }).then(r => {
+    if (r.ok) {
+      clinPassword = pw;
+      clinAuthed   = true;
+      id('clinGate').style.display  = 'none';
+      id('clinMain').style.display  = 'flex';
+      errEl.style.display = 'none';
+      return r.json();
+    } else {
+      errEl.style.display = 'block';
+      throw new Error('wrong password');
+    }
+  }).then(data => {
+    clinRefs = data;
+    buildRefGrid();
+  }).catch(() => {});
+}
+
+function buildRefGrid() {
+  if (!exData.length) { loadExercises().then(buildRefGrid); return; }
+
+  const grid = id('refGrid');
+  grid.innerHTML = '';
+
+  // Deduplicate exercise words
+  const seen = new Set();
+  const words = exData.filter(e => { if(seen.has(e.word)) return false; seen.add(e.word); return true; });
+
+  words.forEach(ex => {
+    const hasRef = !!clinRefs[ex.word];
+    const card   = el('div', 'ref-card' + (hasRef ? ' has-ref' : ''));
+    card.innerHTML = `
+      <div class="ref-word">${esc(ex.word)}</div>
+      <div class="ref-ipa">${esc(ex.ipa)}</div>
+      <div class="ref-status ${hasRef?'ok':'none'}">${hasRef ? '✓ recorded' : '○ no reference'}</div>`;
+    card.onclick = () => openClinWord(ex, card);
+    grid.appendChild(card);
+  });
+
+  const n = Object.keys(clinRefs).length;
+  id('clinRefCount').textContent = `${n} / ${words.length} words recorded`;
+}
+
+function openClinWord(ex, card) {
+  clinWord = ex;
+  qAll('.ref-card').forEach(c => c.classList.remove('sel'));
+  card.classList.add('sel');
+
+  id('clinWord').textContent = ex.word;
+  id('clinIpa').textContent  = ex.ipa;
+  id('clinResult').style.display = 'none';
+  id('clinResult').innerHTML     = '';
+
+  const ref = clinRefs[ex.word];
+  const existEl = id('clinExisting');
+  if (ref) {
+    existEl.style.display = 'flex';
+    existEl.style.alignItems = 'center';
+  } else {
+    existEl.style.display = 'none';
+  }
+
+  id('clinRecArea').style.display = 'flex';
+  resetClinBtn();
+  id('clinRecArea').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+async function startClinRecord() {
+  if (clinRecording || !clinWord) return;
+
+  const btn = id('clinRecBtn');
+  btn.classList.add('recording'); btn.disabled = true;
+  id('clinRecIco').textContent = '⏺'; id('clinRecLbl').textContent = 'Recording…';
+
+  let stream;
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+  } catch(e) { showErr('Mic error: ' + e.name); resetClinBtn(); return; }
+
+  const mime = ['audio/webm;codecs=opus','audio/webm','audio/ogg;codecs=opus','audio/mp4','']
+    .find(m => m==='' || MediaRecorder.isTypeSupported(m));
+  const rec    = new MediaRecorder(stream, mime ? {mimeType:mime} : {});
+  const chunks = [];
+  clinRecording = true;
+
+  rec.ondataavailable = e => { if(e.data && e.data.size>0) chunks.push(e.data); };
+  rec.onstop = async () => {
+    stream.getTracks().forEach(t => t.stop());
+    clinRecording = false;
+    id('clinRecTimer').textContent = 'Saving…';
+    const blob = new Blob(chunks, { type: rec.mimeType || 'audio/webm' });
+    await saveClinReference(blob, rec.mimeType || mime || 'audio/webm');
+    resetClinBtn();
+  };
+
+  rec.start();
+
+  let secs = 4;
+  id('clinRecTimer').textContent = `Recording for ${secs}s…`;
+  const countdown = setInterval(() => {
+    secs--;
+    if (secs > 0) id('clinRecTimer').textContent = `Recording for ${secs}s…`;
+    else clearInterval(countdown);
+  }, 1000);
+
+  setTimeout(() => { clearInterval(countdown); if(rec.state==='recording') rec.stop(); }, 4000);
+}
+
+async function saveClinReference(blob, mime) {
+  const ext  = mime.includes('ogg') ? '.ogg' : mime.includes('mp4') ? '.mp4' : '.webm';
+  const form = new FormData();
+  form.append('audio', blob, 'ref' + ext);
+  form.append('word',  clinWord.word);
+
+  try {
+    const r = await fetch(API + '/clinician/reference', {
+      method:  'POST',
+      headers: { 'X-Clinician-Password': clinPassword },
+      body:    form,
+    });
+    const d = await r.json();
+    if (d.error) { showErr(d.error); return; }
+
+    // Update local cache
+    clinRefs[clinWord.word] = d.entry;
+    buildRefGrid();
+
+    // Show extracted acoustics
+    const entry   = d.entry;
+    const vRefs   = entry.vowel_refs   || {};
+    const fRefs   = entry.friction_refs || {};
+    let   rows    = '';
+    Object.entries(vRefs).forEach(([ph, v]) =>
+      rows += `<div>/${esc(ph)}/ (${esc(v.label)}) → F1 ${v.F1.toFixed(0)} Hz · F2 ${v.F2.toFixed(0)} Hz</div>`);
+    Object.entries(fRefs).forEach(([ph, f]) =>
+      rows += `<div>/${esc(ph)}/ frication → CoG ${f.CoG.toFixed(0)} Hz · ${f.energy.toFixed(1)} dB</div>`);
+
+    const res = id('clinResult');
+    res.style.display = 'block';
+    res.innerHTML = `
+      <div class="ref-acoustic">
+        <div style="color:var(--green);font-weight:700;margin-bottom:6px">✓ Reference saved — ${entry.recorded_at}</div>
+        ${rows || '<div style="color:var(--muted)">No vowels or fricatives detected in this word.</div>'}
+        <div style="color:var(--muted);margin-top:6px;font-size:.72rem">
+          Patients practising "${esc(clinWord.word)}" will now be compared to your voice.
+        </div>
+      </div>`;
+
+    // Update existing badge
+    id('clinExisting').style.display = 'flex';
+    id('clinExisting').style.alignItems = 'center';
+
+  } catch(e) { showErr('Could not save reference: ' + e.message); }
+}
+
+async function clinDelete() {
+  if (!clinWord || !confirm(`Delete reference for "${clinWord.word}"?`)) return;
+  try {
+    await fetch(API + '/clinician/reference/' + clinWord.word, {
+      method:  'DELETE',
+      headers: { 'X-Clinician-Password': clinPassword },
+    });
+    delete clinRefs[clinWord.word];
+    buildRefGrid();
+    id('clinExisting').style.display = 'none';
+    id('clinResult').style.display   = 'none';
+  } catch(e) { showErr('Delete failed: ' + e.message); }
+}
+
+function resetClinBtn() {
+  const btn = id('clinRecBtn');
+  btn.classList.remove('recording'); btn.disabled = false;
+  id('clinRecIco').textContent = '🎙️'; id('clinRecLbl').textContent = 'Record Reference';
+  id('clinRecTimer').textContent = '';
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  LIP CAMERA — MediaPipe Face Mesh, visual only
+// ═══════════════════════════════════════════════════════════════════════════
+
+// Outer lip ring (MediaPipe Face Mesh indices, clockwise from left corner)
+const LIP_OUTER = [61,185,40,39,37,0,267,269,270,409,291,375,321,405,314,17,84,181,91,146];
+// Inner lip ring
+const LIP_INNER = [78,191,80,81,82,13,312,311,310,415,308,324,318,402,317,14,87,178,88,95];
+// Key landmark dots
+const LIP_DOTS  = [0,17,61,291,78,308];
+
+let lipMesh   = null;
+let lipCam    = null;
+let lipActive = false;
+
+async function startLipCam() {
+  const video  = id('lipVideo');
+  const canvas = id('lipCanvas');
+  const status = id('camStatus');
+
+  if (lipActive) return;
+
+  // FaceMesh must be loaded from CDN
+  if (typeof FaceMesh === 'undefined') {
+    status.textContent = '📷 face mesh unavailable';
+    return;
+  }
+
+  status.textContent = '⏳ starting camera…';
+
+  try {
+    lipMesh = new FaceMesh({
+      locateFile: f => `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${f}`
+    });
+    lipMesh.setOptions({
+      maxNumFaces: 1,
+      refineLandmarks: true,
+      minDetectionConfidence: 0.5,
+      minTrackingConfidence: 0.5
+    });
+    lipMesh.onResults(r => drawLipOverlay(r, canvas, status));
+
+    lipCam = new Camera(video, {
+      onFrame: async () => { if (lipMesh) await lipMesh.send({ image: video }); },
+      width: 320, height: 240
+    });
+    await lipCam.start();
+    lipActive = true;
+  } catch(e) {
+    console.warn('Lip cam error:', e);
+    status.textContent = '📷 camera error';
+  }
+}
+
+function stopLipCam() {
+  lipActive = false;
+  if (lipCam)  { lipCam.stop();  lipCam  = null; }
+  if (lipMesh) { lipMesh.close(); lipMesh = null; }
+  const canvas = id('lipCanvas');
+  if (canvas) canvas.getContext('2d').clearRect(0, 0, canvas.width, canvas.height);
+  const video  = id('lipVideo');
+  if (video && video.srcObject) { video.srcObject.getTracks().forEach(t=>t.stop()); video.srcObject=null; }
+  id('camStatus').textContent = '📷 camera off';
+}
+
+function drawLipOverlay(results, canvas, status) {
+  // Size canvas to match its CSS display size
+  const W = canvas.offsetWidth  || 200;
+  const H = canvas.offsetHeight || 150;
+  if (canvas.width !== W)  canvas.width  = W;
+  if (canvas.height !== H) canvas.height = H;
+
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0, 0, W, H);
+
+  if (!results.multiFaceLandmarks || !results.multiFaceLandmarks.length) {
+    status.innerHTML = '👤 no face detected';
+    return;
+  }
+
+  status.innerHTML = '<span class="cam-pulse"></span>lip tracking';
+  const lm = results.multiFaceLandmarks[0];
+
+  // landmark → pixel (X is already flipped by the CSS mirror on the video;
+  // the canvas is also CSS-mirrored so we draw in natural coords)
+  const px = i => lm[i].x * W;
+  const py = i => lm[i].y * H;
+
+  // ── filled outer lip ──────────────────────────────────────────────────────
+  ctx.beginPath();
+  LIP_OUTER.forEach((idx, i) => i ? ctx.lineTo(px(idx), py(idx)) : ctx.moveTo(px(idx), py(idx)));
+  ctx.closePath();
+  ctx.fillStyle   = 'rgba(124,58,237,0.22)';
+  ctx.fill();
+  ctx.strokeStyle = '#7c3aed';
+  ctx.lineWidth   = 2;
+  ctx.stroke();
+
+  // ── inner lip contour ─────────────────────────────────────────────────────
+  ctx.beginPath();
+  LIP_INNER.forEach((idx, i) => i ? ctx.lineTo(px(idx), py(idx)) : ctx.moveTo(px(idx), py(idx)));
+  ctx.closePath();
+  ctx.strokeStyle = '#06b6d4';
+  ctx.lineWidth   = 1.5;
+  ctx.stroke();
+
+  // ── key point dots ────────────────────────────────────────────────────────
+  LIP_DOTS.forEach(idx => {
+    ctx.beginPath();
+    ctx.arc(px(idx), py(idx), 2.5, 0, Math.PI * 2);
+    ctx.fillStyle = '#06b6d4';
+    ctx.fill();
+  });
+}
+
+// ── Lip confirmation panel ────────────────────────────────────────────────────
+function renderLipPanel(lip) {
+  if (!lip || !lip.available) return '';
+
+  const ph    = lip.focus_phoneme || '';
+  const info  = DB[ph] || { color: '#94a3b8' };
+  const jawObs   = lip.jaw_observed   || '—';
+  const jawExp   = lip.jaw_expected   || '—';
+  const roundObs = lip.round_observed || '—';
+  const roundExp = lip.round_expected || '—';
+
+  // Bar values: jaw 0-0.10 scale, ratio 0-0.5 scale
+  const jawPct    = Math.min(100, (lip.jaw_aperture   / 0.10) * 100).toFixed(0);
+  const ratioPct  = Math.min(100, (lip.lip_ratio      / 0.50) * 100).toFixed(0);
+  const jawRefPct = jawExp === 'open' ? 45 : jawExp === 'closed' ? 15 : 30;
+  const ratRefPct = roundExp === 'rounded' ? 64 : roundExp === 'spread' ? 36 : 50;
+
+  const jawCol   = jawObs === jawExp   ? '#10b981' : jawObs === 'mid' ? '#f59e0b' : '#ef4444';
+  const ratCol   = roundObs === roundExp ? '#10b981' : '#f59e0b';
+
+  // Confirmations + mismatches
+  const confirms  = (lip.confirmations || []).map(t => `<div class="lip-confirm">✓ ${esc(t)}</div>`).join('');
+  const mismatches= (lip.mismatches || []).map(t => `<div class="lip-mismatch">✗ ${esc(t)}</div>`).join('');
+
+  // Cross-reference block
+  let xrefHTML = '';
+  const xref = lip.cross_reference;
+  if (xref && xref.notes && xref.notes.length) {
+    const cls = { high:'xref-high', mismatch:'xref-mismatch', low:'xref-low',
+                  moderate:'xref-high', lip_only:'xref-high', acoustic_only:'xref-high' }[xref.confidence] || 'xref-high';
+    xrefHTML = xref.notes.map(n => `<div class="xref-note ${cls}">${esc(n)}</div>`).join('');
+  }
+
+  return `<div class="lip-panel">
+    <p class="lip-title">👄 Lip Tracking Confirmation
+      <span style="font-size:.68rem;color:var(--muted);font-weight:400;margin-left:6px">${lip.n_frames} frames · /${esc(ph)}/</span>
+    </p>
+    <div class="lip-meters">
+      <div class="lip-meter">
+        <div class="lip-meter-label">Jaw aperture — observed: <strong>${jawObs}</strong>, expected: <strong>${jawExp}</strong></div>
+        <div class="lip-bar-bg">
+          <div class="lip-bar-ref" style="left:${jawRefPct}%"></div>
+          <div class="lip-bar-fill" style="width:${jawPct}%;background:${jawCol}"></div>
+        </div>
+        <div class="lip-bar-val">${lip.jaw_aperture.toFixed(3)}</div>
+      </div>
+      <div class="lip-meter">
+        <div class="lip-meter-label">Lip shape — observed: <strong>${roundObs}</strong>, expected: <strong>${roundExp}</strong></div>
+        <div class="lip-bar-bg">
+          <div class="lip-bar-ref" style="left:${ratRefPct}%"></div>
+          <div class="lip-bar-fill" style="width:${ratioPct}%;background:${ratCol}"></div>
+        </div>
+        <div class="lip-bar-val">${lip.lip_ratio.toFixed(2)} h/w ratio</div>
+      </div>
+    </div>
+    <div class="lip-signal">${confirms}${mismatches}</div>
+    ${xrefHTML}
+  </div>`;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  PHONEME TAB
+// ═══════════════════════════════════════════════════════════════════════════
+
+// Practice data: what word to say to demonstrate each phoneme
+const PH_PRACTICE = [
+  // ── vowels ────────────────────────────────────────────────────────────────
+  { ph:'iː', cat:'Vowels',      word:'feet',    bold:'ee',  hint:'Stretch lips wide — long "ee".' },
+  { ph:'ɪ',  cat:'Vowels',      word:'bit',     bold:'i',   hint:'Like "ee" but shorter and more relaxed.' },
+  { ph:'e',  cat:'Vowels',      word:'bed',     bold:'e',   hint:'Tongue mid, lips lightly spread.' },
+  { ph:'æ',  cat:'Vowels',      word:'cat',     bold:'a',   hint:'Open wide — tongue low and forward.' },
+  { ph:'ɑː', cat:'Vowels',      word:'palm',    bold:'a',   hint:'Open wide — tongue low and back.' },
+  { ph:'ɒ',  cat:'Vowels',      word:'hot',     bold:'o',   hint:'Open mouth, lips lightly rounded.' },
+  { ph:'ɔː', cat:'Vowels',      word:'thought', bold:'ough',hint:'Round your lips and pull tongue back.' },
+  { ph:'ʊ',  cat:'Vowels',      word:'foot',    bold:'oo',  hint:'Lightly rounded — not too tight.' },
+  { ph:'uː', cat:'Vowels',      word:'food',    bold:'oo',  hint:'Tight round lips, tongue high.' },
+  { ph:'ʌ',  cat:'Vowels',      word:'cup',     bold:'u',   hint:'Relaxed, mouth slightly open.' },
+  { ph:'ɜː', cat:'Vowels',      word:'bird',    bold:'ir',  hint:'Tongue mid, lips neutral.' },
+  { ph:'ə',  cat:'Vowels',      word:'about',   bold:'a',   hint:'The laziest vowel — completely unstressed.' },
+  // ── australian diphthongs ─────────────────────────────────────────────────
+  { ph:'æɪ', cat:'Diphthongs',  word:'mate',    bold:'a',   hint:'Start open like "cat", then glide up to "ee". This is the classic Australian FACE vowel!' },
+  { ph:'ɑɪ', cat:'Diphthongs',  word:'time',    bold:'i',   hint:'Start at the back ("ah"), glide forward to "ee".' },
+  { ph:'æɔ', cat:'Diphthongs',  word:'now',     bold:'ow',  hint:'Start open like "cat", round lips as you glide back.' },
+  { ph:'əʊ', cat:'Diphthongs',  word:'goat',    bold:'oa',  hint:'Start neutral (schwa), round lips as you glide up.' },
+  { ph:'ɔɪ', cat:'Diphthongs',  word:'boy',     bold:'oy',  hint:'Start rounded, glide forward to "ee".' },
+  { ph:'ɪə', cat:'Diphthongs',  word:'near',    bold:'ear', hint:'"ih" then relax into a schwa.' },
+  { ph:'eə', cat:'Diphthongs',  word:'square',  bold:'are', hint:'"eh" then relax into a schwa.' },
+  // ── stops ─────────────────────────────────────────────────────────────────
+  { ph:'p',  cat:'Stops',       word:'pen',     bold:'p',   hint:'Press both lips firmly — release with a pop. No voice.' },
+  { ph:'b',  cat:'Stops',       word:'ball',    bold:'b',   hint:'Same as /p/ — add your voice (feel the buzz).' },
+  { ph:'t',  cat:'Stops',       word:'top',     bold:'t',   hint:'Tongue tip taps the gum ridge — no voice.' },
+  { ph:'d',  cat:'Stops',       word:'dog',     bold:'d',   hint:'Like /t/ — add your voice.' },
+  { ph:'k',  cat:'Stops',       word:'cat',     bold:'c',   hint:'Back of tongue presses soft palate — no voice.' },
+  { ph:'ɡ',  cat:'Stops',       word:'go',      bold:'g',   hint:'Like /k/ — add your voice.' },
+  // ── fricatives ────────────────────────────────────────────────────────────
+  { ph:'f',  cat:'Fricatives',  word:'fish',    bold:'f',   hint:'Top teeth rest on bottom lip — blow air through.' },
+  { ph:'v',  cat:'Fricatives',  word:'van',     bold:'v',   hint:'Like /f/ — add your voice.' },
+  { ph:'θ',  cat:'Fricatives',  word:'think',   bold:'th',  hint:'Tongue tip gently between teeth — blow gently. No voice!' },
+  { ph:'ð',  cat:'Fricatives',  word:'this',    bold:'th',  hint:'Same as /θ/ — add your voice.' },
+  { ph:'s',  cat:'Fricatives',  word:'sun',     bold:'s',   hint:'Tongue near gum ridge — air hisses through. No voice.' },
+  { ph:'z',  cat:'Fricatives',  word:'zoo',     bold:'z',   hint:'Like /s/ — add your voice.' },
+  { ph:'ʃ',  cat:'Fricatives',  word:'shop',    bold:'sh',  hint:'Tongue behind ridge, lips slightly rounded.' },
+  { ph:'ʒ',  cat:'Fricatives',  word:'vision',  bold:'si',  hint:'Like /ʃ/ — add your voice.' },
+  { ph:'h',  cat:'Fricatives',  word:'hat',     bold:'h',   hint:'Just breathe out — no tongue or lip contact.' },
+  // ── affricates ────────────────────────────────────────────────────────────
+  { ph:'tʃ', cat:'Affricates',  word:'chair',   bold:'ch',  hint:'Start with /t/ position, release into /ʃ/.' },
+  { ph:'dʒ', cat:'Affricates',  word:'jump',    bold:'j',   hint:'Voiced version of /tʃ/.' },
+  // ── nasals ────────────────────────────────────────────────────────────────
+  { ph:'m',  cat:'Nasals',      word:'man',     bold:'m',   hint:'Close lips and hum — feel your nose vibrate.' },
+  { ph:'n',  cat:'Nasals',      word:'net',     bold:'n',   hint:'Tongue on gum ridge — hum through your nose.' },
+  { ph:'ŋ',  cat:'Nasals',      word:'sing',    bold:'ng',  hint:'Back of tongue up — hum through your nose.' },
+  // ── approximants ──────────────────────────────────────────────────────────
+  { ph:'l',  cat:'Approximants',word:'lake',    bold:'l',   hint:'Tongue tip on gum ridge — air flows around the sides.' },
+  { ph:'ɹ',  cat:'Approximants',word:'red',     bold:'r',   hint:'Raise the body of your tongue. Don\'t curl the tip — that\'s American!' },
+  { ph:'w',  cat:'Approximants',word:'wet',     bold:'w',   hint:'Make a tight "oo" shape with your lips, then open into the vowel.' },
+  { ph:'j',  cat:'Approximants',word:'yes',     bold:'y',   hint:'Say a quick "ee" then slide immediately into the next vowel.' },
+];
+
+const PH_STORAGE = 'ph_progress_v1';
+let phFilter     = 'All';
+let phActiveCard = null;
+let phRecording  = false;
+let phRecTimer   = null;
+let phTabBuilt   = false;
+
+// ── local-storage helpers ─────────────────────────────────────────────────────
+function phGetProgress() {
+  try { return JSON.parse(localStorage.getItem(PH_STORAGE)||'{}'); } catch { return {}; }
+}
+function phSaveAttempt(ph, success) {
+  const p = phGetProgress();
+  if (!p[ph]) p[ph] = [];
+  p[ph].push(success ? 1 : 0);
+  if (p[ph].length > 10) p[ph].shift();   // keep last 10
+  localStorage.setItem(PH_STORAGE, JSON.stringify(p));
+}
+function phGetDots(ph) {
+  const p = phGetProgress();
+  return (p[ph] || []).slice(-5);          // last 5 attempts
+}
+
+// ── build tab (once) ──────────────────────────────────────────────────────────
+function initPhonemeTab() {
+  if (phTabBuilt) { refreshPhDots(); return; }
+  phTabBuilt = true;
+
+  // category filter buttons
+  const cats = ['All', ...new Set(PH_PRACTICE.map(p=>p.cat))];
+  const fr = id('phFilterRow');
+  cats.forEach(cat => {
+    const b = el('button','ph-filter-btn'+(cat==='All'?' sel':''));
+    b.textContent = cat;
+    b.onclick = () => {
+      phFilter = cat;
+      qAll('.ph-filter-btn').forEach(x=>x.classList.remove('sel'));
+      b.classList.add('sel');
+      renderPhGrid();
+    };
+    fr.appendChild(b);
+  });
+
+  renderPhGrid();
+}
+
+function renderPhGrid() {
+  const grid = id('phGrid');
+  grid.innerHTML = '';
+  id('phPracticePanel').style.display = 'none';
+  phActiveCard = null;
+
+  const items = phFilter==='All' ? PH_PRACTICE : PH_PRACTICE.filter(p=>p.cat===phFilter);
+  items.forEach(p => {
+    const info = DB[p.ph] || { name:'Unknown', color:'#94a3b8', shape:'neutral' };
+    const dots = phGetDots(p.ph);
+    const mastered = dots.length>=3 && dots.slice(-3).every(d=>d===1);
+
+    const card = el('div','ph-card'+(mastered?' mastered':''));
+    card.id = 'phcard-'+p.ph;
+
+    // highlight the bold letters in the word
+    const wordHTML = highlightBold(p.word, p.bold);
+
+    card.innerHTML = `
+      <div class="ph-big" style="color:${info.color}">${esc(p.ph)}</div>
+      ${mouth(info.shape).replace('width:78px;height:52px','').replace('svg','svg style="width:70px;height:46px"')}
+      <div class="ph-card-name">${esc(info.name.replace(' (AuE)','').replace(' (vl)','').replace(' (vd)',''))}</div>
+      <div class="ph-card-word">say: ${wordHTML}</div>
+      <div class="ph-dots">${dots.map(d=>`<div class="ph-dot ${d?'ok':'err'}"></div>`).join('')}</div>
+    `;
+    card.onclick = () => openPhPractice(p, card, info);
+    grid.appendChild(card);
+  });
+}
+
+function highlightBold(word, bold) {
+  const idx = word.toLowerCase().indexOf(bold.toLowerCase());
+  if (idx<0) return esc(word);
+  return esc(word.slice(0,idx))
+    + `<em>${esc(word.slice(idx,idx+bold.length))}</em>`
+    + esc(word.slice(idx+bold.length));
+}
+
+function refreshPhDots() {
+  PH_PRACTICE.forEach(p => {
+    const card = id('phcard-'+p.ph);
+    if (!card) return;
+    const dots = phGetDots(p.ph);
+    const dotEl = card.querySelector('.ph-dots');
+    if (dotEl) dotEl.innerHTML = dots.map(d=>`<div class="ph-dot ${d?'ok':'err'}"></div>`).join('');
+    const mastered = dots.length>=3 && dots.slice(-3).every(d=>d===1);
+    card.classList.toggle('mastered', mastered);
+  });
+}
+
+// ── open practice panel ───────────────────────────────────────────────────────
+function openPhPractice(p, card, info) {
+  // deselect old
+  if (phActiveCard) phActiveCard.classList.remove('active-card');
+  card.classList.add('active-card');
+  phActiveCard = card;
+
+  const panel = id('phPracticePanel');
+  panel.style.display = 'flex';
+
+  id('phPracticeTitle').textContent = `Practising  /${p.ph}/`;
+
+  // symbol + mouth
+  id('phPracticeSym').innerHTML =
+    `<span style="color:${info.color};font-size:4rem;font-family:monospace">/${esc(p.ph)}/</span><br>
+     ${mouth(info.shape).replace('svg ','svg style="width:110px;height:74px" ')}`;
+
+  // info
+  id('phPracticeInfo').innerHTML =
+    `<div style="font-weight:700;font-size:1rem">${esc(info.name)}</div>
+     <div style="font-size:.82rem;color:var(--muted);margin-top:3px">${esc(info.desc)}</div>
+     <div style="font-size:.8rem;color:var(--green);background:#0d2a1e;padding:7px 11px;border-radius:6px;margin-top:8px">💡 ${esc(p.hint)}</div>`;
+
+  // say word instruction
+  id('phSayWord').innerHTML =
+    `<span style="font-size:.85rem;color:var(--muted)">Say this word out loud:</span>
+     <strong>${highlightBold(p.word, p.bold)}</strong>
+     <span style="font-size:.78rem;color:var(--muted);display:block;margin-top:2px">The underlined letters make the /${esc(p.ph)}/ sound</span>`;
+
+  // reset record button
+  id('phRecBtn').classList.remove('recording');
+  id('phRecBtn').disabled = false;
+  id('phRecIco').textContent = '🎙️';
+  id('phRecLbl').textContent = 'Record';
+  id('phRecTimer').textContent = '';
+  id('phResultBox').innerHTML = '';
+  id('phResultBox').className = '';
+
+  // scroll to panel
+  panel.scrollIntoView({ behavior:'smooth', block:'nearest' });
+}
+
+// ── phoneme recording ─────────────────────────────────────────────────────────
+async function startPhRecord() {
+  if (phRecording || !phActiveCard) return;
+  const p = PH_PRACTICE.find(x => id('phcard-'+x.ph) === phActiveCard);
+  if (!p) return;
+
+  const btn = id('phRecBtn');
+  btn.classList.add('recording'); btn.disabled = true;
+  id('phRecIco').textContent = '⏺'; id('phRecLbl').textContent = 'Recording…';
+
+  let stream;
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({ audio:true, video:false });
+  } catch(e) { showErr('Mic error: '+e.name); resetPhBtn(); return; }
+
+  const mime = ['audio/webm;codecs=opus','audio/webm','audio/ogg;codecs=opus','audio/mp4','']
+    .find(m => m==='' || MediaRecorder.isTypeSupported(m));
+  const rec = new MediaRecorder(stream, mime ? {mimeType:mime} : {});
+  const chunks = [];
+  phRecording = true;
+
+  rec.ondataavailable = e => { if(e.data && e.data.size>0) chunks.push(e.data); };
+  rec.onstop = async () => {
+    stream.getTracks().forEach(t=>t.stop());
+    phRecording = false;
+    clearInterval(phRecTimer);
+    id('phRecTimer').textContent = 'Analysing…';
+    const blob = new Blob(chunks, { type: rec.mimeType || 'audio/webm' });
+    await evaluatePhoneme(blob, rec.mimeType || mime || 'audio/webm', p);
+    resetPhBtn();
+  };
+
+  rec.start();
+
+  let secs = 3;
+  id('phRecTimer').textContent = `Recording for ${secs}s…`;
+  phRecTimer = setInterval(() => {
+    secs--;
+    if (secs > 0) id('phRecTimer').textContent = `Recording for ${secs}s…`;
+  }, 1000);
+
+  setTimeout(() => { if(rec.state==='recording') rec.stop(); }, 3000);
+}
+
+function resetPhBtn() {
+  id('phRecBtn').classList.remove('recording');
+  id('phRecBtn').disabled = false;
+  id('phRecIco').textContent = '🎙️';
+  id('phRecLbl').textContent = 'Try again';
+  id('phRecTimer').textContent = '';
+}
+
+async function evaluatePhoneme(blob, mime, p) {
+  const ext  = mime.includes('ogg')?'.ogg':mime.includes('mp4')?'.mp4':'.webm';
+  const form = new FormData();
+  form.append('audio', blob, 'rec'+ext);
+
+  let data;
+  try {
+    const r = await fetch(API+'/transcribe', { method:'POST', body:form });
+    data = await r.json();
+  } catch(e) { showErr('Network error: '+e.message); return; }
+
+  const info     = DB[p.ph] || {};
+  const phonemes = data.phonemes || [];
+  const heard    = data.text || '';
+  const heardIpa = data.ipa  || '';
+
+  // check if target phoneme is present in the transcription
+  const found = phonemes.includes(p.ph);
+
+  // also accept close alternates (e.g. if they said the right word but espeak gave RP variant)
+  const alternates = { 'æɪ':['eɪ'], 'ɑɪ':['aɪ'], 'æɔ':['aʊ'], 'ɹ':['r'], 'ʉː':['uː'] };
+  const alts = alternates[p.ph] || [];
+  const foundViaAlt = alts.some(a => phonemes.includes(a));
+
+  const success = found || foundViaAlt;
+  phSaveAttempt(p.ph, success);
+  refreshPhDots();
+
+  const box = id('phResultBox');
+  box.className = 'ph-result-box ' + (success ? 'found' : 'notfound');
+
+  if (success) {
+    box.innerHTML = `
+      <div class="ph-res-head">✅ Found <span style="font-family:monospace;color:var(--cyan)">/${esc(p.ph)}/</span> in your speech!</div>
+      <div class="ph-res-ipa">You said: "${esc(heard)}" → ${esc(heardIpa)}</div>
+      ${foundViaAlt && !found ? `<div class="ph-res-tip">Close! The app heard a related sound. Keep practising for the full Australian /æɪ/.</div>` : ''}
+      <div class="ph-res-tip">✓ ${esc(info.name||p.ph)} — well done!</div>
+    `;
+  } else {
+    const tipText = info.tip || p.hint;
+    box.innerHTML = `
+      <div class="ph-res-head">❌ Didn't find <span style="font-family:monospace">/${esc(p.ph)}/</span></div>
+      <div class="ph-res-ipa">I heard: "${esc(heard)}" → ${esc(heardIpa||'(nothing clear)')}</div>
+      ${heard ? `<div class="ph-res-wrong">Try saying the word <strong>${esc(p.word)}</strong> more clearly.</div>` : `<div class="ph-res-wrong">Nothing was transcribed — speak louder and closer to the mic.</div>`}
+      <div class="ph-res-tip">💡 ${esc(tipText)}</div>
+    `;
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  PHONEME DATABASE
+// ═══════════════════════════════════════════════════════════════════════════
+const DB = {
+  // vowels
+  'iː':{ name:'FLEECE vowel',       desc:'High front unrounded',                          example:'fl<em>ee</em>ce, s<em>ee</em>',       tip:'Spread your lips wide like smiling.',                  shape:'spread-close',  color:'#06b6d4' },
+  'ɪ': { name:'KIT vowel',          desc:'Near-high front unrounded',                     example:'k<em>i</em>t, s<em>i</em>t',          tip:'Like "ee" but more relaxed.',                          shape:'spread-close',  color:'#06b6d4' },
+  'e': { name:'DRESS vowel',        desc:'Mid front unrounded',                           example:'dr<em>e</em>ss, s<em>e</em>t',        tip:'Tongue mid, lips spread lightly.',                     shape:'spread-mid',    color:'#06b6d4' },
+  'æ': { name:'TRAP vowel',         desc:'Near-low front unrounded',                      example:'tr<em>a</em>p, c<em>a</em>t',         tip:'Open wide — tongue low and forward.',                  shape:'spread-open',   color:'#06b6d4' },
+  'ɑː':{ name:'PALM/START vowel',   desc:'Low back unrounded',                            example:'p<em>a</em>lm, st<em>a</em>rt',       tip:'Open wide, tongue low and back.',                      shape:'open',          color:'#06b6d4' },
+  'ɒ': { name:'LOT vowel',          desc:'Low back rounded',                              example:'l<em>o</em>t, d<em>o</em>g',          tip:'Open mouth, lips lightly rounded.',                    shape:'open-round',    color:'#06b6d4' },
+  'ɔː':{ name:'THOUGHT vowel',      desc:'Mid-high back rounded',                         example:'th<em>ou</em>ght, s<em>aw</em>',      tip:'Round your lips, tongue pulled back.',                 shape:'mid-round',     color:'#06b6d4' },
+  'ʊ': { name:'FOOT vowel',         desc:'Near-high back rounded',                        example:'f<em>oo</em>t, p<em>u</em>t',         tip:'Lightly rounded — not as tight as "oo".',              shape:'rounded',       color:'#06b6d4' },
+  'uː':{ name:'GOOSE vowel',        desc:'High back rounded',                             example:'g<em>oo</em>se, f<em>oo</em>d',       tip:'Tight round lips, tongue high and back.',              shape:'rounded-close', color:'#06b6d4' },
+  'ʌ': { name:'STRUT vowel',        desc:'Mid-low central unrounded',                     example:'str<em>u</em>t, c<em>u</em>p',        tip:'Relaxed, slightly open mouth.',                        shape:'neutral',       color:'#06b6d4' },
+  'ɜː':{ name:'NURSE vowel',        desc:'Mid central unrounded',                         example:'n<em>ur</em>se, b<em>ir</em>d',       tip:'Tongue mid, lips neutral.',                            shape:'neutral',       color:'#06b6d4' },
+  'ə': { name:'Schwa',              desc:'Mid central (unstressed)',                       example:'th<em>e</em>, <em>a</em>bout',        tip:'The laziest vowel — completely relaxed.',              shape:'neutral',       color:'#64748b' },
+  // Australian diphthongs
+  'æɪ':{ name:'FACE diphthong (AuE)',  desc:'Near-open front → high front. More open start than RP.', example:'m<em>a</em>te, d<em>ay</em>, f<em>a</em>ce', tip:'Start with your mouth more open than "eh" — almost like the start of "cat" — then glide up to "ee". This is the most Australian sound!', shape:'spread-open', color:'#8b5cf6' },
+  'ɑɪ':{ name:'PRICE diphthong (AuE)', desc:'Open back → high front. Starts further back than RP.',  example:'m<em>y</em>, t<em>i</em>me, pr<em>i</em>ce',  tip:'Start at the back of your mouth (like "ah" in palm) then glide forward to "ee".',                                                     shape:'open',        color:'#8b5cf6' },
+  'æɔ':{ name:'MOUTH diphthong (AuE)', desc:'Near-open front → mid back rounded.',                    example:'n<em>ow</em>, h<em>ow</em>, m<em>ou</em>th',  tip:'Start with /æ/ (like "cat") then round your lips as you glide back.',                                                                   shape:'spread-open', color:'#8b5cf6' },
+  'əʊ':{ name:'GOAT diphthong (AuE)',  desc:'Central schwa → high back rounded.',                     example:'g<em>o</em>at, n<em>o</em>, ph<em>o</em>ne',  tip:'Start neutral (schwa), then round lips and glide up.',                                                                                 shape:'neutral',     color:'#8b5cf6' },
+  'ɔɪ':{ name:'CHOICE diphthong',      desc:'Mid-back rounded → high front.',                          example:'ch<em>oi</em>ce, b<em>oy</em>',               tip:'Start rounded then glide to "ee".',                                                                                                    shape:'mid-round',   color:'#8b5cf6' },
+  'ɪə':{ name:'NEAR diphthong',        desc:'High front → mid central.',                               example:'n<em>ear</em>, h<em>ere</em>',                tip:'"ih" then relax into a schwa.',                                                                                                        shape:'spread-close',color:'#8b5cf6' },
+  'eə':{ name:'SQUARE diphthong',      desc:'Mid front → mid central.',                                example:'squ<em>are</em>, th<em>ere</em>',              tip:'"eh" then relax into a schwa.',                                                                                                        shape:'spread-mid',  color:'#8b5cf6' },
+  'ʊə':{ name:'CURE diphthong',        desc:'High back → mid central.',                                example:'c<em>ure</em>, p<em>ure</em>',                 tip:'Rounded then relax into a schwa.',                                                                                                     shape:'rounded',     color:'#8b5cf6' },
+  // RP fallbacks
+  'eɪ':{ name:'FACE diphthong (RP)',   desc:'Mid front → high front.',    example:'f<em>a</em>ce, d<em>ay</em>', tip:'RP version — in Australian English this should be /æɪ/ (more open start).', shape:'spread-mid',  color:'#8b5cf6' },
+  'aɪ':{ name:'PRICE diphthong (RP)',  desc:'Open → high front.',         example:'pr<em>i</em>ce, m<em>y</em>', tip:'RP version — in Australian English this should be /ɑɪ/ (back start).',      shape:'open',        color:'#8b5cf6' },
+  'aʊ':{ name:'MOUTH diphthong (RP)',  desc:'Open → high back rounded.',  example:'m<em>ou</em>th, n<em>ow</em>',tip:'RP version — in Australian English this should be /æɔ/.',                   shape:'open',        color:'#8b5cf6' },
+  // stops
+  'p': { name:'Bilabial stop (vl)',    desc:'Lips press together, air bursts out.',        example:'<em>p</em>en, ha<em>pp</em>y',    tip:'Press both lips together firmly, then pop them apart.',       shape:'bilabial',    color:'#f59e0b' },
+  'b': { name:'Bilabial stop (vd)',    desc:'Like /p/ with vocal cord vibration.',         example:'<em>b</em>all, ro<em>b</em>',     tip:'Same as /p/ — buzz your vocal cords.',                        shape:'bilabial',    color:'#f59e0b' },
+  't': { name:'Alveolar stop (vl)',    desc:'Tongue tip taps the gum ridge.',              example:'<em>t</em>op, bu<em>tt</em>er',   tip:'Tongue tip to the bumpy ridge behind top teeth.',             shape:'alveolar',    color:'#f59e0b' },
+  'd': { name:'Alveolar stop (vd)',    desc:'Like /t/ with voice.',                        example:'<em>d</em>og, a<em>dd</em>',      tip:'Same position as /t/ — add your voice.',                      shape:'alveolar',    color:'#f59e0b' },
+  'k': { name:'Velar stop (vl)',       desc:'Back of tongue presses soft palate.',         example:'<em>c</em>at, bac<em>k</em>',     tip:'Feel the back of your tongue touching the soft palate.',      shape:'velar',       color:'#f59e0b' },
+  'ɡ': { name:'Velar stop (vd)',       desc:'Like /k/ with voice.',                        example:'<em>g</em>o, bi<em>g</em>',       tip:'Same as /k/ — add your voice.',                               shape:'velar',       color:'#f59e0b' },
+  // fricatives
+  'f': { name:'Labiodental fric (vl)', desc:'Upper teeth lightly touch lower lip.',        example:'<em>f</em>ish, lau<em>gh</em>',   tip:'Top teeth on bottom lip — blow air through.',                shape:'labiodental', color:'#10b981' },
+  'v': { name:'Labiodental fric (vd)', desc:'Like /f/ with vocal buzz.',                  example:'<em>v</em>an, lo<em>ve</em>',     tip:'Same as /f/ — add voice.',                                    shape:'labiodental', color:'#10b981' },
+  'θ': { name:'Dental fric (vl)',      desc:'Tongue tip gently between teeth.',            example:'<em>th</em>ink, ba<em>th</em>',   tip:'Put tongue tip between teeth and blow gently. No voice!',     shape:'dental',      color:'#10b981' },
+  'ð': { name:'Dental fric (vd)',      desc:'Like /θ/ but with voice.',                   example:'<em>th</em>is, brea<em>th</em>e', tip:'Same as /θ/ — buzz your vocal cords.',                        shape:'dental',      color:'#10b981' },
+  's': { name:'Alveolar fric (vl)',    desc:'Air hisses near the gum ridge.',              example:'<em>s</em>un, mi<em>ss</em>',     tip:'Tongue close to gum ridge — let air hiss through.',           shape:'alveolar',    color:'#10b981' },
+  'z': { name:'Alveolar fric (vd)',    desc:'Buzzy /s/.',                                  example:'<em>z</em>oo, bu<em>zz</em>',     tip:'Buzzy /s/ — feel the vibration in your throat.',             shape:'alveolar',    color:'#10b981' },
+  'ʃ': { name:'Postalveolar fric (vl)',desc:'Tongue behind ridge, lips rounded.',          example:'<em>sh</em>op, na<em>ti</em>on',  tip:'Like /s/ but tongue a bit further back, round lips slightly.',shape:'postalveolar',color:'#10b981' },
+  'ʒ': { name:'Postalveolar fric (vd)',desc:'Buzzy /ʃ/.',                                  example:'vi<em>si</em>on, mea<em>s</em>ure',tip:'Buzzy /ʃ/ sound.',                                          shape:'postalveolar',color:'#10b981' },
+  'h': { name:'Glottal fricative',     desc:'Breathed air, no contact.',                   example:'<em>h</em>at, <em>wh</em>o',      tip:'Just breathe out — no tongue or lip contact needed.',         shape:'open',        color:'#10b981' },
+  // affricates
+  'tʃ':{ name:'Postalveolar affric (vl)',desc:'/t/ + /ʃ/ blended.',                       example:'<em>ch</em>air, tea<em>ch</em>',  tip:'Start with /t/ then release into /ʃ/.',                      shape:'postalveolar',color:'#ec4899' },
+  'dʒ':{ name:'Postalveolar affric (vd)',desc:'/d/ + /ʒ/ blended.',                       example:'<em>j</em>ump, bri<em>dge</em>',  tip:'Voiced version of /tʃ/.',                                    shape:'postalveolar',color:'#ec4899' },
+  // nasals
+  'm': { name:'Bilabial nasal',        desc:'Lips closed, air through nose.',              example:'<em>m</em>an, ha<em>mm</em>er',   tip:'Close lips and hum — feel your nose vibrate.',               shape:'bilabial',    color:'#f43f5e' },
+  'n': { name:'Alveolar nasal',        desc:'Tongue on gum ridge, air through nose.',      example:'<em>n</em>et, fu<em>nn</em>y',    tip:'Like /d/ position — hum through your nose.',                 shape:'alveolar',    color:'#f43f5e' },
+  'ŋ': { name:'Velar nasal',           desc:'Back of tongue up, air through nose.',        example:'si<em>ng</em>, ri<em>ng</em>',    tip:'Like /g/ position — hum through your nose.',                 shape:'velar',       color:'#f43f5e' },
+  // approximants
+  'l': { name:'Lateral approximant',   desc:'Tongue tip on ridge, air around sides.',      example:'<em>l</em>ake, fe<em>ll</em>',    tip:'Tongue up at the ridge — air flows around the sides.',       shape:'alveolar',     color:'#a78bfa' },
+  'r': { name:'Rhotic approximant',    desc:'Tongue raised, no contact.',                  example:'<em>r</em>ead, ca<em>r</em>',     tip:'Raise the body of your tongue — don\'t curl the tip.',      shape:'postalveolar', color:'#a78bfa' },
+  'ɹ': { name:'Rhotic approximant (AuE)',desc:'Australian r — tongue body up, no tip curl.',example:'<em>r</em>ead, t<em>r</em>ee',  tip:'Don\'t curl your tongue tip. Raise the tongue body instead.',shape:'postalveolar', color:'#a78bfa' },
+  'w': { name:'Bilabial approximant',  desc:'Rounded lips + raised back tongue.',           example:'<em>w</em>et, a<em>w</em>ay',     tip:'Make a tight "oo" shape, then open into the next vowel.',    shape:'rounded-close',color:'#a78bfa' },
+  'j': { name:'Palatal approximant',   desc:'Tongue raised near hard palate.',              example:'<em>y</em>es, <em>u</em>se',      tip:'Say a quick "ee" then slide into the next vowel.',           shape:'spread-close', color:'#a78bfa' },
+  // Australian specific
+  'ɐ': { name:'Near-open central (AuE)',desc:'Australian short open vowel — between /a/ and /ə/.', example:'kang<em>a</em>roo, good on y<em>a</em>', tip:'Very common in Australian English! Relaxed open mouth, tongue middle.', shape:'neutral', color:'#f97316' },
+  'ʉː':{ name:'GOOSE vowel (AuE fronted)',desc:'Fronted high back rounded — more central than /uː/.', example:'g<em>oo</em>se, t<em>oo</em>th', tip:'Australian "oo" is further forward than British or American.',          shape:'rounded-close', color:'#06b6d4' },
+};
+</script>
+</body>
+</html>
