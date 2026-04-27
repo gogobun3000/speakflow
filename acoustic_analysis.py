@@ -103,6 +103,7 @@ class FricationFeatures:
     tilt_db_oct:  float          # spectral tilt (slope) — lisps show flatter spectrum
     lisp_risk:    str            # "high" / "moderate" / "low"
     lisp_note:    str
+    lisp_type:    str = "none"   # "none" | "interdental" | "lateral" | "addental"
 
 @dataclass
 class GeneralFeatures:
@@ -299,25 +300,54 @@ def _extract_frication(snd: parselmouth.Sound, phoneme: str) -> Optional[Fricati
 
         cog_diff = cog - ref["CoG_hz"]
 
-        # Lisp risk: for /s/ and /z/, low CoG suggests /θ/-like production
+        # ── Spectral spread and skewness for lisp type discrimination ─────────
+        # Spectral spread (variance around CoG) — lateral lisps have wider spread
+        spectral_var  = call(spectrum, "Get standard deviation", 2)
+        # Low-frequency energy ratio (below 3000 Hz) — interdental lisps have more
+        low3k_mask    = freqs < 3000
+        total_energy  = np.sum(amps) + 1e-20
+        low3k_ratio   = float(np.sum(amps[low3k_mask]) / total_energy)
+
+        # ── Lisp type classification ──────────────────────────────────────────
         lisp_risk = "low"
+        lisp_type = "none"     # none | interdental | lateral | addental
         lisp_note = ""
+
         if phoneme in {"s", "z"}:
-            if cog < 4500:
+            if cog < 3800:
+                # Very low CoG + high low-frequency energy → interdental lisp
+                # Tongue is between teeth, producing /θ/-like sound
                 lisp_risk = "high"
+                lisp_type = "interdental"
                 lisp_note = (
-                    f"CoG {cog:.0f} Hz is well below the target {ref['CoG_hz']:.0f} Hz. "
-                    "This pattern matches a dental /θ/ substitution (interdental lisp). "
-                    "Clinician should assess tongue placement."
+                    f"CoG {cog:.0f} Hz matches a /θ/ substitution pattern (interdental lisp). "
+                    "The tongue tip is likely between the teeth. "
+                    "Keep the tongue TIP behind the upper teeth."
                 )
-            elif cog < 6000:
-                lisp_risk = "moderate"
+            elif cog < 4800 and energy_db < -35 and spectral_var > 2500:
+                # Moderate CoG + low energy + wide spread → lateral lisp
+                # Air escaping around sides of tongue
+                lisp_risk = "high"
+                lisp_type = "lateral"
                 lisp_note = (
-                    f"CoG {cog:.0f} Hz is below target {ref['CoG_hz']:.0f} Hz. "
-                    "Possible lateral or addental lisp — check tongue lateralisation."
+                    f"CoG {cog:.0f} Hz with low energy ({energy_db:.1f} dB) and "
+                    f"wide spectral spread suggests a lateral lisp. "
+                    "Air may be escaping around the sides of the tongue instead of through the centre."
+                )
+            elif cog < 5500:
+                # Moderate CoG, otherwise normal → addental lisp
+                # Tongue touching upper teeth instead of ridge
+                lisp_risk = "moderate"
+                lisp_type = "addental"
+                lisp_note = (
+                    f"CoG {cog:.0f} Hz is below the typical range. "
+                    "The tongue tip may be touching the upper teeth rather than the alveolar ridge. "
+                    "Try lifting the tongue tip slightly away from the teeth."
                 )
             else:
-                lisp_note = f"Frication CoG {cog:.0f} Hz is within typical range."
+                lisp_risk = "low"
+                lisp_type = "none"
+                lisp_note = f"Frication CoG {cog:.0f} Hz is within the typical range for /{phoneme}/."
 
         return FricationFeatures(
             phoneme=phoneme,
@@ -329,6 +359,7 @@ def _extract_frication(snd: parselmouth.Sound, phoneme: str) -> Optional[Fricati
             tilt_db_oct=round(tilt_db_oct, 1),
             lisp_risk=lisp_risk,
             lisp_note=lisp_note,
+            lisp_type=lisp_type,
         )
     except Exception as e:
         print(f"  [frication error] {e}")
