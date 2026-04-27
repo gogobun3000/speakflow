@@ -91,6 +91,95 @@ def _headline_code(score: float, word_correct: bool) -> str:
 
 # ── Multi-error synthesis (AI) ────────────────────────────────────────────────
 
+def synthesise_from_finding(
+    finding:     dict,
+    word:        str,
+    score:       float,
+    word_correct:bool,
+    attempt_num: int  = 1,
+    improving:   bool = False,
+    patient_age: int  = 15,
+) -> dict:
+    """
+    Generate AI feedback from a structured ArticulatorFinding dict.
+    This is the preferred path when articulator_engine has produced a finding.
+
+    The AI receives the clinical instruction and only handles tone/naturalness.
+    """
+    headline = T.cue(_headline_code(score, word_correct))
+    clinician_note = (
+        f"[{finding.get('articulator')}/{finding.get('problem')}] "
+        f"Severity {finding.get('severity')}/100. "
+        f"Stage {finding.get('intervention_stage')}: {finding.get('stage_name')}. "
+        f"{finding.get('clinician_note','')}"
+    )
+
+    client = _get_client()
+    if not client or not API_AVAILABLE:
+        # Template-only: use the protocol instruction directly
+        tips = [finding.get("instruction", "")]
+        if finding.get("facilitating_words"):
+            words = ", ".join(finding["facilitating_words"][:4])
+            tips.append(f"Good practice words: {words}.")
+        return {
+            "headline": headline,
+            "tips": tips,
+            "clinician_notes": [clinician_note],
+            "source": "articulator_protocol",
+        }
+
+    # AI polish: make the clinical instruction natural and age-appropriate
+    ctx = finding.get("ai_prompt_context", {})
+    attempt_note = ""
+    if attempt_num > 5 and not improving:
+        attempt_note = f"The patient has attempted this {attempt_num} times without improvement. Acknowledge the difficulty warmly and suggest they take a short break before trying again."
+
+    prompt = f"""You are a warm, encouraging speech therapy assistant for a {patient_age}-year-old.
+
+The clinical system has identified:
+- Articulator: {ctx.get('articulator', '')}
+- Problem: {ctx.get('problem', '')}
+- Disorder: {ctx.get('disorder', '')}
+- Intervention stage: {ctx.get('stage_num', 1)} — {ctx.get('stage_name', '')}
+
+The clinician-approved instruction to deliver is:
+"{ctx.get('instruction', '')}"
+
+{attempt_note}
+
+Write a single paragraph (2–3 sentences) that:
+- Delivers the instruction above naturally and warmly
+- Uses the exact technique described — do not change or add clinical content
+- Speaks directly to a teenager without clinical jargon
+- Is encouraging but specific — praise what was right if the score is above 70%
+- Score was {int(score*100)}% on the word "{word}"
+
+Output only the paragraph."""
+
+    try:
+        msg = client.messages.create(
+            model="claude-haiku-4-5-20251001",
+            max_tokens=180,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        combined = msg.content[0].text.strip()
+    except Exception as e:
+        print(f"  [report_engine] AI polish failed: {e}")
+        combined = finding.get("instruction", "")
+
+    tips = [combined]
+    if finding.get("facilitating_words"):
+        words = ", ".join(finding["facilitating_words"][:4])
+        tips.append(f"Good practice words to try: {words}.")
+
+    return {
+        "headline":        headline,
+        "tips":            tips,
+        "clinician_notes": [clinician_note],
+        "source":          "articulator_ai",
+    }
+
+
 def synthesise_feedback(
     codes:       list[ErrorCode],
     word:        str,

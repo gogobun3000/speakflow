@@ -47,14 +47,17 @@ def _nearest_vowel(F1, F2, exclude=""):
 # ── Main entry point ──────────────────────────────────────────────────────────
 
 def generate(
-    target_word:     str,
-    target_phonemes: list[str],
-    alignment:       list[dict],
-    acoustic:        dict,
-    lip:             dict,
-    score:           float,
-    word_correct:    bool,
-    patient_age:     int = 15,
+    target_word:          str,
+    target_phonemes:      list[str],
+    alignment:            list[dict],
+    acoustic:             dict,
+    lip:                  dict,
+    score:                float,
+    word_correct:         bool,
+    patient_age:          int  = 15,
+    articulator_finding:  dict | None = None,   # from articulator_engine
+    attempt_num:          int  = 1,
+    improving:            bool = False,
 ) -> dict:
     """
     Coordinate rule engine + templates + (optionally) AI synthesis.
@@ -132,13 +135,25 @@ def generate(
             praise_codes.append("CORRECT_SOUND")
 
     # ── 3. Synthesise feedback ────────────────────────────────────────────────
-    result = RE2.synthesise_feedback(
-        codes=error_codes,
-        word=target_word,
-        score=score,
-        word_correct=word_correct,
-        patient_age=patient_age,
-    )
+    # Prefer articulator engine path (richer, stage-aware) over generic codes
+    if articulator_finding:
+        result = RE2.synthesise_from_finding(
+            finding      = articulator_finding,
+            word         = target_word,
+            score        = score,
+            word_correct = word_correct,
+            attempt_num  = attempt_num,
+            improving    = improving,
+            patient_age  = patient_age,
+        )
+    else:
+        result = RE2.synthesise_feedback(
+            codes        = error_codes,
+            word         = target_word,
+            score        = score,
+            word_correct = word_correct,
+            patient_age  = patient_age,
+        )
 
     # Add praise
     praise = list(dict.fromkeys(T.cue(c) for c in praise_codes if T.cue(c)))[:2]

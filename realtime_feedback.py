@@ -84,6 +84,15 @@ except Exception as _fg:
     FEEDBACK_OK = False
     print(f"  ✗ Feedback generator: {_fg}")
 
+# ── Articulator engine ────────────────────────────────────────────────────────
+ARTICULATOR_OK = False
+try:
+    from articulator_engine import analyse_to_dict as _articulator_analyse
+    ARTICULATOR_OK = True
+    print("  ✓ Articulator engine ready")
+except Exception as _ae2:
+    print(f"  ✗ Articulator engine: {_ae2}")
+
 # ── Lip analysis ─────────────────────────────────────────────────────────────
 try:
     from lip_analysis import analyse_lip as _analyse_lip, cross_reference as _cross_ref
@@ -606,6 +615,27 @@ def check():
         if acoustic:    payload["acoustic"] = acoustic
         if lip_result:  payload["lip"]      = lip_result
 
+        # ── Articulator engine — structured clinical finding ──────────────────
+        if ARTICULATOR_OK and acoustic and acoustic.get("available"):
+            try:
+                for seg in acoustic.get("segments", []):
+                    ph   = seg.get("phoneme", "")
+                    fric = seg.get("friction")
+                    vow  = seg.get("vowel")
+                    if fric or vow:
+                        art = _articulator_analyse(
+                            phoneme    = ph,
+                            frication  = fric,
+                            vowel      = vow,
+                            lip        = lip_result,
+                            confidence = (vow or {}).get("confidence", 1.0),
+                        )
+                        if art:
+                            payload["articulator"] = art
+                            break
+            except Exception as _ae3:
+                print(f"  articulator engine: {_ae3}")
+
         # Save phoneme co-occurrence data (with acoustic enrichment)
         _save_phoneme_contexts(
             _ctx_word, alignment,
@@ -617,13 +647,14 @@ def check():
         if FEEDBACK_OK:
             try:
                 payload["feedback"] = _generate_feedback(
-                    target_word     = target_word,
-                    target_phonemes = target_ph,
-                    alignment       = alignment,
-                    acoustic        = acoustic or {},
-                    lip             = lip_result or {},
-                    score           = score,
-                    word_correct    = word_ok,
+                    target_word          = target_word,
+                    target_phonemes      = target_ph,
+                    alignment            = alignment,
+                    acoustic             = acoustic or {},
+                    lip                  = lip_result or {},
+                    score                = score,
+                    word_correct         = word_ok,
+                    articulator_finding  = payload.get("articulator"),
                 )
             except Exception as fe:
                 print(f"  feedback generator error: {fe}")
